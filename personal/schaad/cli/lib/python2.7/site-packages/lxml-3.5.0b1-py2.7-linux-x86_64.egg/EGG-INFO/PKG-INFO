@@ -1,0 +1,126 @@
+Metadata-Version: 1.1
+Name: lxml
+Version: 3.5.0b1
+Summary: Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API.
+Home-page: http://lxml.de/
+Author: lxml dev team
+Author-email: lxml-dev@lxml.de
+License: UNKNOWN
+Description: lxml is a Pythonic, mature binding for the libxml2 and libxslt libraries.  It
+        provides safe and convenient access to these libraries using the ElementTree
+        API.
+        
+        It extends the ElementTree API significantly to offer support for XPath,
+        RelaxNG, XML Schema, XSLT, C14N and much more.
+        
+        To contact the project, go to the `project home page
+        <http://lxml.de/>`_ or see our bug tracker at
+        https://launchpad.net/lxml
+        
+        In case you want to use the current in-development version of lxml,
+        you can get it from the github repository at
+        https://github.com/lxml/lxml .  Note that this requires Cython to
+        build the sources, see the build instructions on the project home
+        page.  To the same end, running ``easy_install lxml==dev`` will
+        install lxml from
+        https://github.com/lxml/lxml/tarball/master#egg=lxml-dev if you have
+        an appropriate version of Cython installed.
+        
+        3.5.0b1 (2015-09-18)
+        ====================
+        
+        Features added
+        --------------
+        
+        * ``cleanup_namespaces()`` accepts a new argument ``keep_ns_prefixes``
+          that does not remove definitions of the provided prefix-namespace
+          mapping from the tree.
+        
+        * ``cleanup_namespaces()`` accepts a new argument ``top_nsmap`` that
+          moves definitions of the provided prefix-namespace mapping to the
+          top of the tree.
+        
+        * LP#1490451: ``Element`` objects gained a ``cssselect()`` method as
+          known from ``lxml.html``.  Patch by Simon Sapin.
+        
+        * API functions and methods behave and look more like Python functions,
+          which allows introspection on them etc.  One side effect to be aware of
+          is that the functions now bind as methods when assigned to a class
+          variable.  A quick fix is to wrap them in ``staticmethod()`` (as for
+          normal Python functions).
+        
+        * ISO-Schematron support gained an option ``error_finder`` that allows
+          passing a filter function for picking validation errors from reports.
+        
+        * LP#1243600: Elements in ``lxml.html`` gained a ``classes`` property
+          that provides a set-like interface to the ``class`` attribute.
+          Original patch by masklinn.
+        
+        * LP#1341964: The soupparser now handles DOCTYPE declarations, comments
+          and processing instructions outside of the root element.
+          Patch by Olli Pottonen.
+        
+        * LP#1421512: The ``docinfo`` of a tree was made editable to allow
+          setting and removing the public ID and system ID of the DOCTYPE.
+          Patch by Olli Pottonen.
+        
+        * LP#1442427: More work-arounds for quirks and bugs in pypy and pypy3.
+        
+        * ``lxml.html.soupparser`` now uses BeautifulSoup version 4 instead
+          of version 3 if available.
+        
+        Bugs fixed
+        ----------
+        
+        * Memory errors that occur during tree adaptations (e.g. moving subtrees
+          to foreign documents) could leave the tree in a crash prone state.
+        
+        * Calling ``process_children()`` in an XSLT extension element without
+          an ``output_parent`` argument failed with a ``TypeError``.
+          Fix by Jens Tröger.
+        
+        * GH#162: Image data in HTML ``data`` URLs is considered safe and
+          no longer removed by ``lxml.html.clean`` JavaScript cleaner.
+        
+        * GH#166: Static build could link libraries in wrong order.
+        
+        * GH#172: Rely a bit more on libxml2 for encoding detection rather than
+          rolling our own in some cases.  Patch by Olli Pottonen.
+        
+        * GH#159: Validity checks for names and string content were tightened
+          to detect the use of illegal characters early.  Patch by Olli Pottonen.
+        
+        * LP#1421921: Comments/PIs before the DOCTYPE declaration were not
+          serialised.  Patch by Olli Pottonen.
+        
+        * LP#659367: Some HTML DOCTYPE declarations were not serialised.
+          Patch by Olli Pottonen.
+        
+        * LP#1238503: lxml.doctestcompare is now consistent with stdlib's doctest
+          in how it uses ``+`` and ``-`` to refer to unexpected and missing output.
+        
+        * Empty prefixes are explicitly rejected when a namespace mapping is used
+          with ElementPath to avoid hiding bugs in user code.
+        
+        * Several problems with PyPy were fixed by switching to Cython 0.23.
+        
+        
+        
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: C
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Classifier: Topic :: Text Processing :: Markup :: XML
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
