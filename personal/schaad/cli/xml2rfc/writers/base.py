@@ -446,6 +446,10 @@ class BaseRfcWriter:
             initials_list.remove('')
         except:
             pass
+        for initial in initials_list:
+            if len(initial) != 1:
+                xml2rfc.log.error('Initial list "%s" incorrectly formatted near %s line %s' %
+                                  (initials, author.base, author.sourceline))
         if len(initials_list) > 0:
             initials = ". ".join(initials_list) + "."
         return initials
