@@ -109,6 +109,7 @@ output_format = [
         "ext": "txt",
         "spacefix": xml2rfc.utils.formatXmlWhitespace,
         "unicodefix": xml2rfc.utils.safeReplaceUnicode,
+        "slashfix": xml2rfc.utils.safeTagSlashedWords,
         "writer": xml2rfc.PaginatedTextRfcWriter,
         "postprocesslines": "post_process_lines"
     },
@@ -116,6 +117,7 @@ output_format = [
         "ext": "raw.txt",
         "spacefix": xml2rfc.utils.formatXmlWhitespace,
         "unicodefix": xml2rfc.utils.safeReplaceUnicode,
+        "slashfix": xml2rfc.utils.safeTagSlashedWords,
         "writer": xml2rfc.RawTextRfcWriter,
         "postprocesslines": "post_process_lines"
     },
@@ -123,6 +125,7 @@ output_format = [
         "ext": "nroff",
         "spacefix": xml2rfc.utils.formatXmlWhitespace,
         "unicodefix": xml2rfc.utils.safeReplaceUnicode,
+        "slashfix": xml2rfc.utils.safeTagSlashedWords,
         "writer": xml2rfc.NroffRfcWriter,
         "postprocesslines": "post_process_lines"
     },
@@ -130,6 +133,7 @@ output_format = [
         "ext": "html",
         "spacefix": lambda x: x,
         "unicodefix": lambda x: x,
+        "slashfix": xml2rfc.utils.safeTagSlashedWords,
         "writer": xml2rfc.HtmlRfcWriter,
         "postprocesslines": "post_process_lines"
     },
@@ -149,6 +153,7 @@ class WriterElementTest(unittest.TestCase):
             ext = format["ext"]
             spacefix = format["spacefix"]
             unicodefix = format["unicodefix"]
+            slashfix = format["slashfix"]
             writer = format["writer"](XmlRfcDummy(), quiet=True)
             testfunc = getattr(writer, func_name)
             postprocessing = getattr(writer, format["postprocesslines"])
@@ -163,6 +168,7 @@ class WriterElementTest(unittest.TestCase):
             #
             spacefix(element)
             unicodefix(element)
+            slashfix(element)
             testfunc(element)
             output = '\n'.join(arrstrip(postprocessing(writer.buf)))  # Don't care about initial blank
             diff_test(self, valid, output, validpath.replace('valid', 'failed'))
@@ -208,6 +214,9 @@ class WriterElementTest(unittest.TestCase):
 
     def test_textwrap(self):
         return self.function_test("textwrap", "write_section_rec")
+
+    def test_slashbreak(self):
+        return self.function_test("slashbreak", "write_section_rec")
 
     def test_abbreviations(self):
         return self.function_test("abbreviations", "write_t_rec")
