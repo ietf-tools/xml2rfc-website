@@ -538,7 +538,7 @@ class HtmlRfcWriter(BaseRfcWriter):
             bullet_td.attrib['class'] = 'reference'
             ref_td = E.TD()
             ref_td.attrib['class'] = 'top'
-            last = ref_td
+            last = None
             authors = reference.findall('front/author')
             for j, author in enumerate(authors):
                 organization = author.find('organization')
@@ -546,10 +546,11 @@ class HtmlRfcWriter(BaseRfcWriter):
                 surname = author.attrib.get('surname')
                 multipleInitials = False
                 if surname:
-                    if author[0].tag is lxml.etree.PI:
-                        pidict = self.parse_pi(author[0])
-                        if pidict and "multiple-initials" in pidict and pidict["multiple-initials"] == "yes":
-                            multipleInitials = True
+                    for child in author.iterchildren():
+                        if child.tag is lxml.etree.PI:
+                            pidict = self.parse_pi(author[0])
+                            if pidict and "multiple-initials" in pidict and pidict["multiple-initials"] == "yes":
+                                multipleInitials = True
                 initials = self.get_initials(author, multipleInitials)
                 a = None
                 if j == len(authors) - 1 and len(authors) > 1:
@@ -589,11 +590,15 @@ class HtmlRfcWriter(BaseRfcWriter):
                 title_string = ''
             if title_string:
                 if reference.attrib.get("quote-title", "true") == "true": # attribute default value: yes
-                    last.tail = ', "' if len(authors) else '"'
+                    if last is not None:
+                        last.tail = ', "'
+                    else:
+                        ref_td.text = '"'
                     title_a = E.A(title_string)
                     title_a.tail = '"'
                 else:
-                    last.tail = ', ' if len(authors) else ''
+                    if last is not None:
+                        last.tail = ', '
                     title_a = E.A(title_string)
                     title_a.tail = ''
                 ref_td.append(title_a)
