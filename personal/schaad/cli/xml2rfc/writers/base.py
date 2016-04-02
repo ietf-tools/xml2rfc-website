@@ -578,10 +578,11 @@ class BaseRfcWriter:
                 buf.append('and ')
             if surname:
                 multipleInitials = False
-                if author[0].tag is lxml.etree.PI:
-                    pidict = self.parse_pi(author[0])
-                    if pidict and "multiple-initials" in pidict and pidict["multiple-initials"] == "yes":
-                        multipleInitials = True
+                for child in author.iterchildren():
+                    if child.tag is lxml.etree.PI:
+                       pidict = self.parse_pi(author[0])
+                       if pidict and "multiple-initials" in pidict and pidict["multiple-initials"] == "yes":
+                           multipleInitials = True
                         
                 initials = self.get_initials(author, multipleInitials)
                 if i == len(authors) - 1 and len(authors) > 1:
@@ -679,7 +680,7 @@ class BaseRfcWriter:
         lines = []
         # Render author?
         authorship = self.pis['authorship']
-        if authorship == 'yes':
+        if authorship == 'yes' or authorship == 'IAB':
             # Keep track of previous organization and remove if redundant.
             last_org = None
             last_pos = None
@@ -692,13 +693,13 @@ class BaseRfcWriter:
                              get('surname', '') + role)
                 organization = author.find('organization')
                 org_name = ''
-                if organization is not None:
+                if organization is not None and authorship != 'IAB':
                     abbrev = organization.attrib.get("abbrev", None)
                     if  abbrev != None and abbrev.strip() != '':
                         org_name = abbrev.strip()
                     elif organization.text and organization.text.strip() != '':
                         org_name = organization.text.strip()
-                if org_name == '':
+                if org_name == '' and authorship != 'IAB':
                     lines.append('')
                 else:
                     if org_name == last_org:
