@@ -834,7 +834,7 @@ class BaseRfcWriter:
         
 
     def write_section_rec(self, section, count_str="1.", appendix=False,
-                           level=0, numbered=True):
+                           level=0, numbered=True, emitNumbered="all"):
         """ Recursively writes <section> elements 
         
             We use the self.indexmode flag to determine whether or not we
@@ -912,6 +912,10 @@ class BaseRfcWriter:
                     if not self.indexmode:
                         xml2rfc.log.warn('Numbered sections are not permitted after unnumbered sections: found section "%s" without attribute numbered="no"' % (title,))
                     numbered = False
+                if emitNumbered=="only" and not numbered:
+                    continue
+                if emitNumbered=="no" and numbered:
+                    continue
             if appendix == True and not count_str:
                 if s_count == 1 and self.pis["rfcedstyle"] == "yes":
                    self.needLines(-1)
@@ -1093,7 +1097,7 @@ class BaseRfcWriter:
         # Appendix sections
         back = self.r.find('back')
         if back is not None:
-            self.write_section_rec(back, None, appendix=True)
+            self.write_section_rec(back, None, appendix=True, emitNumbered="only")
 
         # Index section, disable if there are no irefs
         if len(self._iref_index) > 0:
@@ -1102,6 +1106,9 @@ class BaseRfcWriter:
             autoAnchor = 'rfc.index'
             item = _RfcItem(title, autoAnchor, title=title)
             self._index.append(item)
+
+        if back is not None:
+            self.write_section_rec(back, None, appendix=True, emitNumbered="no")
 
         # Authors addresses section
         authors = self.r.findall('front/author')
@@ -1212,13 +1219,16 @@ class BaseRfcWriter:
         # Appendix sections
         back = self.r.find('back')
         if back is not None:
-            self.write_section_rec(back, None, appendix=True)
-
-        self.write_crefs()
+            self.write_section_rec(back, None, appendix=True, emitNumbered="only")
 
         # Index section, disable if there are no irefs
         if len(self._iref_index) > 0:
             self.insert_iref_index()
+
+        if back is not None:
+            self.write_section_rec(back, None, appendix=True, emitNumbered="no")
+
+        self.write_crefs()
 
         # Authors addresses section
         authors = self.r.findall('front/author')
