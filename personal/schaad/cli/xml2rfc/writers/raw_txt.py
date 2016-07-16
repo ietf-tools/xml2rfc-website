@@ -435,7 +435,7 @@ class RawTextRfcWriter(BaseRfcWriter):
             if element.tag == 'xref':
                 line.append(self._expand_xref(element))
             elif element.tag == 'eref':
-                if element.text:
+                if element.text and len(element.text)>0:
                     line.append(element.text + ' ')
                     self.eref_count += 1
                     if element.text != element.attrib['target']:
@@ -1421,6 +1421,7 @@ class RawTextRfcWriter(BaseRfcWriter):
                 # line = line.replace(u"\u8209", '-')
                 line = line.replace(u'\u00A0', u' ')
                 line = line.replace(u'\u2011', u'-')
+                line = line.replace(u'\u200B', u'')
             output.append(line);
         return output
 
