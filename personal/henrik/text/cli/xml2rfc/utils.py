@@ -23,7 +23,7 @@ except ImportError:
 
 import xml2rfc.log
 
-class MyTextWrapper(textwrap.TextWrapper):
+class TextWrapper(textwrap.TextWrapper):
     """ Subclass that overrides a few things in the standard implementation """
     def __init__(self, **kwargs):
         textwrap.TextWrapper.__init__(self, **kwargs)
@@ -102,14 +102,17 @@ class MyTextWrapper(textwrap.TextWrapper):
             text = re.sub(re.escape(key), val, text)
         return text
 
-    def wrap(self, text, initial_indent='', subsequent_indent='',
+    def wrap(self, text, initial='', subsequent_indent=None,
         fix_doublespace=True, fix_sentence_endings=True, drop_whitespace=True):
         """ Mirrored implementation of wrap which replaces characters properly
-            also lets you easily specify indentation on the fly
+            and also lets you easily specify indentation on the fly
         """
         # Set indentation
-        self.initial_indent = initial_indent
-        self.subsequent_indent = subsequent_indent
+        self.initial_indent = initial
+        if subsequent_indent == None:
+            self.subsequent_indent = initial
+        else:
+            self.subsequent_indent = subsequent_indent
         self.fix_sentence_endings = fix_sentence_endings
         self.drop_whitespace = drop_whitespace
 
@@ -127,7 +130,7 @@ class MyTextWrapper(textwrap.TextWrapper):
         # Replace some characters after splitting has occured
         parts = self._split(text)
         chunks = []
-        max_word_len = self.width - len(subsequent_indent)
+        max_word_len = self.width - len(self.subsequent_indent)
         for chunk in parts:
             chunk2 = self.replace(chunk)
             if len(chunk2) > max_word_len:
