@@ -4,7 +4,6 @@ from __future__ import unicode_literals, print_function
 
 import copy
 import datetime
-import lxml.etree
 import os
 import re
 import six
@@ -83,10 +82,9 @@ class PrepToolWriter:
         if not quiet is None:
             options.quiet = quiet
         self.xmlrfc = xmlrfc
-        self.root = xmlrfc.getroot()
-        self.tree = self.root.getroottree()
+        self.tree = xmlrfc.tree
+        self.root = self.tree.getroot()
         self.options = options
-        self.when = 'before'                    # used for validation output messages
         self.errors = []
         self.ol_counts = {}
         self.v3_rng_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'v3.rng')
@@ -108,11 +106,17 @@ class PrepToolWriter:
         #
         self.liberal = liberal if liberal != None else options.liberal
 
+    def get_attribute_names(self, tag):
+        attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=ns)
+        names = [ a.get('name') for a in attr ]
+        return names
+        
     def get_attribute_defaults(self, tag):
         if not tag in self.attribute_defaults:
+            deprecated_attributes = set(['keepWithNext', 'keepWithPrevious', 'toc', 'pageno', ])
             attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=ns)
             defaults = dict( (a.get('name'), a.get("{%s}defaultValue"%ns['a'], None)) for a in attr )
-            keys = list( set(defaults.keys()) - set(['keepWithNext', 'keepWithPrevious', 'toc', ]))
+            keys = list( set(defaults.keys()) - deprecated_attributes)
             keys.sort()
             self.attribute_defaults[tag] = OrderedDict( (k, defaults[k]) for k in keys if defaults[k] )
         return self.attribute_defaults[tag]
@@ -149,7 +153,7 @@ class PrepToolWriter:
     def validate(self, when):
 
         
-        v3_rng = lxml.etree.RelaxNG(file=self.v3_rng_file)
+        v3_rng = etree.RelaxNG(file=self.v3_rng_file)
 
         # Our schema doesn't permit xi:include elements, so we must expand
         # before validation
@@ -174,7 +178,7 @@ class PrepToolWriter:
         # Use lxml's built-in serialization
         file = open(filename, 'w', encoding='utf-8')
 
-        text = lxml.etree.tostring(self.root.getroottree(), 
+        text = etree.tostring(self.root.getroottree(), 
                                         xml_declaration=True, 
                                         encoding='utf-8',
                                         pretty_print=True)
@@ -198,7 +202,6 @@ class PrepToolWriter:
             './/*[@anchor]',                    # 5.1.5.  Check "anchor"
             '.;insert_version()',               # 5.2.1.  "version" Insertion
             './front;insert_series_info()',     # 5.2.2.  "seriesInfo" Insertion
-            # mon
             './front;insert_date())',           # 5.2.3.  <date> Insertion
             '.;insert_preptime()',              # 5.2.4.  "prepTime" Insertion
             './/ol[@group]',                    # 5.2.5.  <ol> Group "start" Insertion
@@ -210,17 +213,14 @@ class PrepToolWriter:
             './front/date',                     # 5.3.1.  "month" Attribute
             './/*[@ascii]',                     # 5.3.2.  ASCII Attribute Processing
             './front/author',
-            # tue
             './/*[@title]',                     # 5.3.3.  "title" Conversion
+            './/*[@keepWithPrevious="true"]',   # 5.3.4.  "keepWithPrevious" Conversion
             '.;fill_in_expires_date()',         # 5.4.1.  "expiresDate" Insertion
             './front;insert_boilerplate()',     # 5.4.2.  <boilerplate> Insertion
             '.;check_series_and_submission_type()', # 5.4.2.1.  Compare <rfc> "submissionType" and <seriesInfo> "stream"
-            # wed (+ investigating verification runtime)
             './/boilerplate;insert_status_of_memo()',  # 5.4.2.2.  "Status of this Memo" Insertion
-            # thu
             './/boilerplate;insert_copyright_notice()', # 5.4.2.3.  "Copyright Notice" Insertion
             './/boilerplate//section',          # 5.2.7.  Section "toc" attribute
-            # sun
             './/reference;insert_target()',     # 5.4.3.  <reference> "target" Insertion
             './/name;insert_slugified_name()',  # 5.4.4.  <name> Slugification
             './/references;sort()',             # 5.4.5.  <reference> Sorting
@@ -235,11 +235,9 @@ class PrepToolWriter:
             './/back//section;add_number()',
             '.;paragraph_add_number()',
             './/iref;add_number()',             # 5.4.7.  <iref> Numbering
-            # mon
             './/xref',                          # 5.4.8.  <xref> Processing
             './/relref',                        # 5.4.9.  <relref> Processing
             './/artwork',                       # 5.5.1.  <artwork> Processing
-            # tue
             './/sourcecode',                    # 5.5.2.  <sourcecode> Processing
             './/*[@removeInRFC="true"]',        # 5.6.1.  <note> Removal
             './/cref;removal()',                # 5.6.2.  <cref> Removal
@@ -313,6 +311,8 @@ class PrepToolWriter:
             for s in selectors:
                 if selector_visits[s] == 0:
                     log.note("Selector '%s' has not matched" % (s))
+
+        return self.tree
 
     # ----------------------------------------------------------------
 
@@ -646,6 +646,22 @@ class PrepToolWriter:
         name = self.element('name')
         name.text = title
         e.insert(0, name)
+
+    # 5.3.4.  "keepWithPrevious" Conversion
+    # 
+    #    For every element that has a (deprecated) "keepWithPrevious" attribute,
+    #    remove the "keepWithPrevious" attribute, and if its value is "true",
+    #    and the previous element can have a "keepWithNext" element, remove
+    #    "keepWithPrevious" and replace it with a "keepWithNext" attribute set
+    #    to "true" on the previous element.
+    def attribute_keepwithprevious_true(self, e, p):
+        value = e.get('keepWithPrevious')
+        prev = e.getprevious()
+        prev_attrs = self.get_attribute_names(prev.tag)
+        if value=='true' and prev!=None and 'keepWithNext' in prev_attrs:
+            prev.set('keepWithNext', value)
+            del e.attrib['keepWithPrevious']
+
 
     # 5.4.  Generation
     # 
