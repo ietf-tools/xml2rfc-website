@@ -62,7 +62,8 @@ class V2v3XmlWriter:
         if not quiet is None:
             options.quiet = quiet
         self.xmlrfc = xmlrfc
-        self.root = xmlrfc.getroot()
+        self.tree = xmlrfc.tree
+        self.root = self.tree.getroot()
         self.options = options
 
     def validate(self):
@@ -300,7 +301,7 @@ class V2v3XmlWriter:
         ]
 
         # replace the vocabulary v2 dtd, but keep some entity definitions.
-        tree = self.root.getroottree()
+        tree = self.tree
         tree.docinfo.system_url = "rfc2629-xhtml.ent"
 
         for s in selectors:
@@ -323,6 +324,8 @@ class V2v3XmlWriter:
                     func(e, e.getparent())
             else:
                 log.warn("No handler for function %s, slug %s" % (func_name, slug, ))
+
+        return self.tree
 
     # ----------------------------------------------------------------------
 
@@ -997,3 +1000,5 @@ class V2v3XmlWriter:
             if c.tail != None:
                 if c.tail.strip() == '':
                     c.tail = None        
+
+                    
