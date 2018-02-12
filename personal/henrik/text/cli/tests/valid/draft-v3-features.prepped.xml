@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<rfc category="exp" consensus="false" docName="draft-v3-features" indexInclude="true" ipr="trust200902" prepTime="2018-02-10" scripts="Cherokee,Common,Cyrillic,Greek,Latin" sortRefs="true" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3">
+<rfc category="exp" consensus="false" docName="draft-v3-features" indexInclude="true" ipr="trust200902" prepTime="2018-02-11" scripts="Cherokee,Common,Cyrillic,Greek,Latin" sortRefs="true" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3">
   <link rel="canonical" href="https://greenbytes.de/tech/webdav/rfc2629xslt/v3test.html"/>
   <front>
     <title>xml2rfc V3 Feature Tests</title>
@@ -119,11 +119,11 @@
           Test.
         </t>
         <t pn="section-2.1-2">
-          The title of this section is "<xref target="titlenameelement" format="title" displayFormat="of" pageno="false" derivedContent="Title in  &lt;name&gt;  element, including markup"/>".
+          The title of this section is "<xref target="titlenameelement" format="title" displayFormat="of" derivedContent="Title in  &lt;name&gt;  element, including markup"/>".
         </t>
       </section>
       <section anchor="titlexref" numbered="true" removeInRFC="false" toc="include" pn="section-2.2">
-        <name slugifiedName="name-title-with-xref">Title with <tt>xref</tt>: <xref target="titlexref" displayFormat="of" format="default" pageno="false" derivedContent="Section 2.2"/></name>
+        <name slugifiedName="name-title-with-xref">Title with <tt>xref</tt>: <xref target="titlexref" displayFormat="of" format="default" derivedContent="Section 2.2"/></name>
         <t pn="section-2.2-1">
           Test.
         </t>
@@ -131,14 +131,14 @@
       <section anchor="titleid" numbered="true" removeInRFC="false" toc="include" pn="section-2.3">
         <name slugifiedName="name-title-with-id">Title with <cref anchor="titleidid" display="true">id</cref></name>
         <t pn="section-2.3-1">
-          Test: a <xref target="titleidid" displayFormat="of" format="default" pageno="false" derivedContent="reference to the comment">reference to the comment</xref>.
+          Test: a <xref target="titleidid" displayFormat="of" format="default" derivedContent="reference to the comment">reference to the comment</xref>.
         </t>
       </section>
     </section>
     <section numbered="true" removeInRFC="false" toc="include" pn="section-3">
       <name slugifiedName="name-renaming-references">Renaming References</name>
       <t pn="section-3-1">
-        Test: <xref target="REFTEST" displayFormat="of" format="default" pageno="false" derivedContent="0REFTEST"/>.
+        Test: <xref target="REFTEST" displayFormat="of" format="default" derivedContent="0REFTEST"/>.
       </t>
     </section>
     <section anchor="lists" numbered="true" removeInRFC="false" toc="include" pn="section-4">
@@ -231,7 +231,7 @@
           <li pn="section-4.2-4">Three <em>3</em></li>
         </ol>
         <t pn="section-4.2-5">
-          List item <xref target="ol1" format="counter" displayFormat="of" pageno="false" derivedContent="4.2"/> is "One".
+          List item <xref target="ol1" format="counter" displayFormat="of" derivedContent="4.2"/> is "One".
         </t>
         <ol start="4" spacing="normal" type="1" pn="section-4.2-6">
           <li anchor="ol4" pn="section-4.2-7">
@@ -242,7 +242,7 @@
           </li>
         </ol>
         <t pn="section-4.2-10">
-          List item <xref target="ol4" format="counter" displayFormat="of" pageno="false" derivedContent="4.2"/> is the list above.
+          List item <xref target="ol4" format="counter" displayFormat="of" derivedContent="4.2"/> is the list above.
         </t>
         <ol group="oltest1" anchor="olt1" start="1" spacing="normal" type="1" pn="section-4.2-11">
           <li pn="section-4.2-12">list 1 / item 1</li>
@@ -269,43 +269,43 @@
           <ol type="1" spacing="normal" start="1" pn="section-4.2.1-2">
             <li pn="section-4.2.1-3">1</li>
             <li pn="section-4.2.1-4">2</li>
-            <li anchor="olstyle1item3" pn="section-4.2.1-5">3 (check: <xref target="olstyle1item3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyle1item3" pn="section-4.2.1-5">3 (check: <xref target="olstyle1item3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-6">a</t>
           <ol type="a" spacing="normal" start="1" pn="section-4.2.1-7">
             <li pn="section-4.2.1-8">a</li>
             <li pn="section-4.2.1-9">b</li>
-            <li anchor="olstyleaitem3" pn="section-4.2.1-10">c (check: <xref target="olstyleaitem3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleaitem3" pn="section-4.2.1-10">c (check: <xref target="olstyleaitem3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-11">A</t>
           <ol type="A" spacing="normal" start="1" pn="section-4.2.1-12">
             <li pn="section-4.2.1-13">A</li>
             <li pn="section-4.2.1-14">B</li>
-            <li anchor="olstyleAitem3" pn="section-4.2.1-15">C (check: <xref target="olstyleAitem3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleAitem3" pn="section-4.2.1-15">C (check: <xref target="olstyleAitem3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-16">i</t>
           <ol type="i" spacing="normal" start="1" pn="section-4.2.1-17">
             <li pn="section-4.2.1-18">i</li>
             <li pn="section-4.2.1-19">ii</li>
-            <li anchor="olstyleiitem3" pn="section-4.2.1-20">iii (check: <xref target="olstyleiitem3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleiitem3" pn="section-4.2.1-20">iii (check: <xref target="olstyleiitem3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-21">I</t>
           <ol type="I" spacing="normal" start="1" pn="section-4.2.1-22">
             <li pn="section-4.2.1-23">I</li>
             <li pn="section-4.2.1-24">II</li>
-            <li anchor="olstyleIitem3" pn="section-4.2.1-25">III (check: <xref target="olstyleIitem3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleIitem3" pn="section-4.2.1-25">III (check: <xref target="olstyleIitem3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-26">REC%d</t>
           <ol type="REC%d" spacing="normal" start="1" pn="section-4.2.1-27">
             <li pn="section-4.2.1-28">REC1</li>
             <li pn="section-4.2.1-29">REC2</li>
-            <li anchor="olstyleRECditem3" pn="section-4.2.1-30">REC3 (check: <xref target="olstyleRECditem3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleRECditem3" pn="section-4.2.1-30">REC3 (check: <xref target="olstyleRECditem3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-31">REC%c with start=5</t>
           <ol type="REC%c" start="5" spacing="normal" pn="section-4.2.1-32">
             <li pn="section-4.2.1-33">e</li>
             <li pn="section-4.2.1-34">f</li>
-            <li anchor="olstyleRECc5item3" pn="section-4.2.1-35">g (check: <xref target="olstyleRECc5item3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleRECc5item3" pn="section-4.2.1-35">g (check: <xref target="olstyleRECc5item3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
           <t pn="section-4.2.1-36">REC%i grouped</t>
           <ol type="REC%i" group="listi" start="1" spacing="normal" pn="section-4.2.1-37">
@@ -313,7 +313,7 @@
           </ol>
           <t pn="section-4.2.1-39">REC%i grouped, continued</t>
           <ol type="REC%i" group="listi" start="2" spacing="normal" pn="section-4.2.1-40">
-            <li anchor="olstyleRECi2item3" pn="section-4.2.1-41">ii (check: <xref target="olstyleRECi2item3" format="counter" displayFormat="of" pageno="false" derivedContent="4.2.1"/>)</li>
+            <li anchor="olstyleRECi2item3" pn="section-4.2.1-41">ii (check: <xref target="olstyleRECi2item3" format="counter" displayFormat="of" derivedContent="4.2.1"/>)</li>
           </ol>
         </section>
       </section>
@@ -329,7 +329,7 @@
         <name slugifiedName="name-unordered-lists-multi-parag">Unordered Lists (multi-paragraph / nested)</name>
         <ul empty="false" spacing="normal" pn="section-4.4-1">
           <li pn="section-4.4-2">
-            <t pn="section-4.4-3">The quick brown fox jumps over the lazy dog.</t>
+            <t keepWithNext="true" pn="section-4.4-3">The quick brown fox jumps over the lazy dog.</t>
             <t pn="section-4.4-4">
               <em>The quick brown fox jumps over the lazy dog.</em>
             </t>
@@ -368,12 +368,12 @@
       </section>
       <section numbered="true" removeInRFC="false" toc="include" pn="section-4.6">
         <name slugifiedName="name-referring-to-list-items">Referring to list items</name>
-        <t pn="section-4.6-1">(default) see <xref target="ol1" displayFormat="of" format="default" pageno="false" derivedContent="Section 4.2"/>.</t>
-        <t pn="section-4.6-2">(counter) see <xref target="ol1" format="counter" displayFormat="of" pageno="false" derivedContent="4.2"/>.</t>
-        <t pn="section-4.6-3">(title) see <xref target="ol1" format="title" displayFormat="of" pageno="false" derivedContent="ol1"/>.</t>
-        <t pn="section-4.6-4">(default, TEXTCONTENT) see <xref target="ol1" displayFormat="of" format="default" pageno="false" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
-        <t pn="section-4.6-5">(counter, TEXTCONTENT) see <xref target="ol1" format="counter" displayFormat="of" pageno="false" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
-        <t pn="section-4.6-6">(title, TEXTCONTENT) see <xref target="ol1" format="title" displayFormat="of" pageno="false" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
+        <t pn="section-4.6-1">(default) see <xref target="ol1" displayFormat="of" format="default" derivedContent="Section 4.2"/>.</t>
+        <t pn="section-4.6-2">(counter) see <xref target="ol1" format="counter" displayFormat="of" derivedContent="4.2"/>.</t>
+        <t pn="section-4.6-3">(title) see <xref target="ol1" format="title" displayFormat="of" derivedContent="ol1"/>.</t>
+        <t pn="section-4.6-4">(default, TEXTCONTENT) see <xref target="ol1" displayFormat="of" format="default" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
+        <t pn="section-4.6-5">(counter, TEXTCONTENT) see <xref target="ol1" format="counter" displayFormat="of" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
+        <t pn="section-4.6-6">(title, TEXTCONTENT) see <xref target="ol1" format="title" displayFormat="of" derivedContent="TEXTCONTENT">TEXTCONTENT</xref>.</t>
       </section>
     </section>
     <section numbered="true" removeInRFC="false" toc="include" pn="section-5">
@@ -392,7 +392,7 @@
           <li pn="section-5-6">two</li>
         </ol>
         <t pn="section-5-7">
-          The parts above have anchors (<xref target="quickbrownfox" displayFormat="of" format="default" pageno="false" derivedContent="Section 5"/> and <xref target="blockquotelist" displayFormat="of" format="default" pageno="false" derivedContent="Section 5"/>), but this one does not.
+          The parts above have anchors (<xref target="quickbrownfox" displayFormat="of" format="default" derivedContent="Section 5"/> and <xref target="blockquotelist" displayFormat="of" format="default" derivedContent="Section 5"/>), but this one does not.
         </t>
       </blockquote>
       <t pn="section-5-8">without block content:</t>
@@ -494,7 +494,7 @@
       <section numbered="true" removeInRFC="false" toc="include" pn="section-8.5">
         <name slugifiedName="name-included-type-svg">included (type svg)</name>
         <figure align="left" suppress-title="false" pn="figure-6">
-          <name slugifiedName="name-references-of">References of <xref target="RFC7991" displayFormat="of" format="default" pageno="false" derivedContent="RFC7991"/></name>
+          <name slugifiedName="name-references-of">References of <xref target="RFC7991" displayFormat="of" format="default" derivedContent="RFC7991"/></name>
           <artwork alt="(external file)" type="svg" align="left" pn="section-8.5-1" originalSrc="rfc7991.references.svg">
 	  <svg xmlns="http://www.w3.org/2000/svg" width="175" height="57" viewBox="0 0 175 57">
    <path d="M60,2l12,12l-12,12l-12-12zM88,2l12,12l-12,12l-12-12zM116,2l12,12l-12,12l-12-12zM18,16l12,12l-12,12l-12-12zM46,16l12,12l-12,12l-12-12zM74,16l12,12l-12,12l-12-12zM102,16l12,12l-12,12l-12-12zM130,16l12,12l-12,12l-12-12zM158,16l12,12l-12,12l-12-12zM60,30l12,12l-12,12l-12-12zM88,30l12,12l-12,12l-12-12zM116,30l12,12l-12,12l-12-12z" fill="#bdbdc5"/><path stroke="#000" stroke-width="0.5" d="M7,27h26l13,13l14-14l14,14l28-28l14,14l14-14l15,15h26v3h-27l-14-14l-14,14l-14-14l-28,28l-14-14l-14,14l-14-14h-25z" fill="#ffd652"/><path d="M3,26h5v5h-5zM168,26h5v5h-5z"/><desc>(external file)</desc></svg></artwork>
@@ -505,7 +505,7 @@
 	  </artwork>
         </figure>
         <t anchor="node1" pn="section-8.5-3">
-          This paragraph has the anchor '<xref target="node1" displayFormat="of" format="default" pageno="false" derivedContent="Section 8.5"/>'
+          This paragraph has the anchor '<xref target="node1" displayFormat="of" format="default" derivedContent="Section 8.5"/>'
           which will be in conflict with an id attribute in the included SVG.
         </t>
       </section>
@@ -571,7 +571,7 @@
           </tbody>
         </table>
         <t pn="section-10.3-1">
-          See <xref target="table.bare.referenced" displayFormat="of" format="default" pageno="false" derivedContent="Table 3"/>.
+          See <xref target="table.bare.referenced" displayFormat="of" format="default" derivedContent="Table 3"/>.
         </t>
       </section>
       <section numbered="true" removeInRFC="false" toc="include" pn="section-10.4">
@@ -680,7 +680,7 @@
           </thead>
           <tbody>
             <tr>
-              <td align="left" colspan="0" rowspan="0">The <em>quick</em> <sup>brown</sup> <sub>fox</sub> <strong>jumps</strong> over the lazy <bcp14>OPTIONAL</bcp14> <tt>dog</tt>. <xref target="markuptable" displayFormat="of" format="default" pageno="false" derivedContent="Table 9"/> <eref target="https://en.wikipedia.org/wiki/The_quick_brown_fox_jumps_over_the_lazy_dog"/> <cref display="true">comment</cref></td>
+              <td align="left" colspan="0" rowspan="0">The <em>quick</em> <sup>brown</sup> <sub>fox</sub> <strong>jumps</strong> over the lazy <bcp14>OPTIONAL</bcp14> <tt>dog</tt>. <xref target="markuptable" displayFormat="of" format="default" derivedContent="Table 9"/> <eref target="https://en.wikipedia.org/wiki/The_quick_brown_fox_jumps_over_the_lazy_dog"/> <cref display="true">comment</cref></td>
               <td align="left" colspan="0" rowspan="0">
                 <t pn="section-10.9-1">
                   Paragraph 1
@@ -4644,19 +4644,19 @@
       <section numbered="true" removeInRFC="false" toc="include" pn="section-11.3">
         <name slugifiedName="name-to-references">To "References"</name>
         <t pn="section-11.3-1">
-          See <xref target="some.references" displayFormat="of" format="default" pageno="false" derivedContent="Section 12"/>, where the title is "<xref format="title" target="some.references" displayFormat="of" pageno="false" derivedContent="Some References"/>".
+          See <xref target="some.references" displayFormat="of" format="default" derivedContent="Section 12"/>, where the title is "<xref format="title" target="some.references" displayFormat="of" derivedContent="Some References"/>".
         </t>
         <t pn="section-11.3-2">
-          See <xref target="some.references" displayFormat="of" format="default" pageno="false" derivedContent="references below">references below</xref>.
+          See <xref target="some.references" displayFormat="of" format="default" derivedContent="references below">references below</xref>.
         </t>
       </section>
       <section numbered="true" removeInRFC="false" toc="include" pn="section-11.4">
         <name slugifiedName="name-to-unnumbered-section">To Unnumbered Section</name>
         <t pn="section-11.4-1">
-          See <xref target="contributors" displayFormat="of" format="default" pageno="false" derivedContent="Appendix b"/>, where the title is "<xref format="title" target="contributors" displayFormat="of" pageno="false" derivedContent="Contributors"/>".
+          See <xref target="contributors" displayFormat="of" format="default" derivedContent="Appendix b"/>, where the title is "<xref format="title" target="contributors" displayFormat="of" derivedContent="Contributors"/>".
         </t>
         <t pn="section-11.4-2">
-          See <xref target="contributors" displayFormat="of" format="default" pageno="false" derivedContent="contributors below">contributors below</xref>.
+          See <xref target="contributors" displayFormat="of" format="default" derivedContent="contributors below">contributors below</xref>.
         </t>
       </section>
     </section>

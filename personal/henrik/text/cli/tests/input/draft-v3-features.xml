@@ -331,7 +331,9 @@
         <ul>
           <li>
             <t>The quick brown fox jumps over the lazy dog.</t>
-            <t><em>The quick brown fox jumps over the lazy dog.</em></t>
+            <t keepWithPrevious="true">
+	       <em>The quick brown fox jumps over the lazy dog.</em>
+	    </t>
           </li>
           <li><t>Two <strong>2</strong></t></li>
           <li><t>Three <em>3</em></t></li>
