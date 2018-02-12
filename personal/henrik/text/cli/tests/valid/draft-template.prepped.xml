@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<rfc category="info" consensus="false" indexInclude="true" ipr="trust200902" prepTime="2018-02-10" scripts="Common,Latin" sortRefs="false" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3" xml:lang="en">
+<rfc category="info" consensus="false" indexInclude="true" ipr="trust200902" prepTime="2018-02-11" scripts="Common,Latin" sortRefs="false" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3" xml:lang="en">
   <!-- category values: std, bcp, info, exp, and historic
      ipr values: full3667, noModification3667, noDerivatives3667
      you can add the attributes updates="NNNN" and obsoletes="NNNN" 
@@ -70,12 +70,12 @@
   <middle>
     <section numbered="true" toc="include" removeInRFC="false" pn="section-1">
       <name slugifiedName="name-introduction">Introduction</name>
-      <t pn="section-1-1">The original specification of xml2rfc format is in <xref target="RFC2629" format="default" displayFormat="of" pageno="false" derivedContent="RFC 2629">RFC 2629</xref>.</t>
+      <t pn="section-1-1">The original specification of xml2rfc format is in <xref target="RFC2629" format="default" displayFormat="of" derivedContent="RFC 2629">RFC 2629</xref>.</t>
       <section numbered="true" toc="include" removeInRFC="false" pn="section-1.1">
         <name slugifiedName="name-requirements-language">Requirements Language</name>
         <t pn="section-1.1-1">The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
         "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
-        document are to be interpreted as described in <xref target="RFC2119" format="default" displayFormat="of" pageno="false" derivedContent="RFC 2119">RFC 2119</xref>.</t>
+        document are to be interpreted as described in <xref target="RFC2119" format="default" displayFormat="of" derivedContent="RFC 2119">RFC 2119</xref>.</t>
       </section>
     </section>
     <section anchor="simple_list" numbered="true" toc="include" removeInRFC="false" pn="section-2">
@@ -100,7 +100,7 @@
 |_______________________|
             </artwork>
       </figure>
-      <t pn="section-3-4">Cross-references allowed in pre- and postamble. <xref target="min_ref" format="default" displayFormat="of" pageno="false" derivedContent="min_ref"/>.</t>
+      <t pn="section-3-4">Cross-references allowed in pre- and postamble. <xref target="min_ref" format="default" displayFormat="of" derivedContent="min_ref"/>.</t>
       <t pn="section-3-5">The CDATA means you don't need to escape meta-characters (especially
       &lt; (&amp;lt;) and &amp; (&amp;amp;)) but is not essential.
       Figures may also have a title attribute but it won't be displayed unless
@@ -374,8 +374,8 @@ main(int argc, char *argv[])
       <t pn="section-7-1">This template was derived from an initial version written by Pekka
       Savola and contributed by him to the xml2rfc project.</t>
       <t pn="section-7-2">
-	This document is part of a plan to make xml2rfc indispensable <xref target="DOMINATION" format="default" displayFormat="of" pageno="false" derivedContent="DOMINATION"/>.
-	This document may be shared as needed <xref target="SHARING" format="default" displayFormat="of" pageno="false" derivedContent="SHARING"/>.
+	This document is part of a plan to make xml2rfc indispensable <xref target="DOMINATION" format="default" displayFormat="of" derivedContent="DOMINATION"/>.
+	This document may be shared as needed <xref target="SHARING" format="default" displayFormat="of" derivedContent="SHARING"/>.
       </t>
     </section>
     <!-- Possibly a 'Contributors' section ... -->
@@ -383,7 +383,7 @@ main(int argc, char *argv[])
       <name slugifiedName="name-iana-considerations">IANA Considerations</name>
       <t pn="section-8-1">This memo includes no request to IANA.</t>
       <t pn="section-8-2">All drafts are required to have an IANA considerations section (see
-      <xref target="I-D.narten-iana-considerations-rfc2434bis" format="default" displayFormat="of" pageno="false" derivedContent="the update of&#10;      RFC 2434">the update of
+      <xref target="I-D.narten-iana-considerations-rfc2434bis" format="default" displayFormat="of" derivedContent="the update of&#10;      RFC 2434">the update of
       RFC 2434</xref> for a guide). If the draft does not require IANA to do
       anything, the section contains an explicit statement that this is the
       case (as above). If there are no requirements for IANA, the section will
@@ -392,7 +392,7 @@ main(int argc, char *argv[])
     <section anchor="Security" numbered="true" toc="include" removeInRFC="false" pn="section-9">
       <name slugifiedName="name-security-considerations">Security Considerations</name>
       <t pn="section-9-1">All drafts are required to have a security considerations section.
-      See <xref target="RFC3552" format="default" displayFormat="of" pageno="false" derivedContent="RFC 3552">RFC 3552</xref> for a guide.</t>
+      See <xref target="RFC3552" format="default" displayFormat="of" derivedContent="RFC 3552">RFC 3552</xref> for a guide.</t>
     </section>
   </middle>
   <!--  *****BACK MATTER ***** -->
