@@ -365,6 +365,12 @@ class CachingResolver(lxml.etree.Resolver):
 
 class AnnotatedElement(lxml.etree.ElementBase):
     pis = None
+    def get(self, key, default=None):
+        value = super(AnnotatedElement, self).get(key, default)
+        if value == default:
+            return value
+        else:
+            return six.text_type(value)
 
 class XmlRfcParser:
 
