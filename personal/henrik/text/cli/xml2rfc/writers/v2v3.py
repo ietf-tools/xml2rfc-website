@@ -148,6 +148,7 @@ class V2v3XmlWriter:
         n = self.element(tag)
         n.text = e.text
         n.tail = e.tail
+        n.sourceline = e.sourceline
         copyattr(e, n)
         for c in e.iterchildren():
             n.append(c)                 # moves c from e to n
@@ -176,6 +177,7 @@ class V2v3XmlWriter:
                 b.text = a.text
             if a.tail and a.tail.strip():
                 b.tail = a.tail
+            b.sourceline = a.sourceline
             copyattr(a, b)
             for child in a.iterchildren():
                 b.append(child)         # moves child from a to b
@@ -393,9 +395,10 @@ class V2v3XmlWriter:
     # 
     #    Deprecated.
     def element_artwork(self, e, p):
-        e.text = CDATA(e.text)          # prevent text from being mucked up by other processors
+        if e.text:
+            e.text = CDATA(e.text)          # prevent text from being mucked up by other processors
         stripattr(e, ['height', '{http://www.w3.org/XML/1998/namespace}space', 'width', ])
-        if re.search(r'^\s*<CODE BEGINS>', e.text):
+        if e.text and re.search(r'^\s*<CODE BEGINS>', e.text):
             # We have source code.  Permitted attributes: anchor, name,
             # source, type.
             e = self.replace(e, 'sourcecode')
@@ -551,7 +554,7 @@ class V2v3XmlWriter:
                 e.insert(0, self.element('link', rel='convertedFrom', href="https://datatracker.ietf.org/doc/%s"%(e.get('docName'), )))
         elif 'docName' in e.attrib:
             front.insert(i, self.element('seriesInfo', name="Internet-Draft", value=e.get('docName')))
-        stripattr(e, ['docName', 'number', 'xi'])
+        stripattr(e, ['xi', ])
 
     # 2.47.  <seriesInfo>
     # 
@@ -851,6 +854,7 @@ class V2v3XmlWriter:
         tr = None
         align = []
         table = self.element('table')
+        table.sourceline = e.sourceline
         copyattr(e, table)
         for x in e.iterchildren():
             if   x.tag == 'preamble':
