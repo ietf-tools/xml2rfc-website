@@ -128,15 +128,15 @@ def main():
                            help='with --text: calculate page breaks, and emit form feeds and page top'
                            ' spacing, but omit headers and footers from the paginated format'
                        )
-    formatoptions.add_option('', '--legacy', default=False, action='store_true',
+    formatoptions.add_option('', '--legacy', default=True, action='store_true',
+                           help='with --text: use the legacy text formatter, rather than the new one.'
+                       )
+    formatoptions.add_option('', '--v3', dest='legacy', action='store_false',
                            help='with --text: use the legacy text formatter, rather than the new one.'
                        )
     formatoptions.add_option('', '--add-xinclude', action='store_true',
                            help='with --v2v3: replace reference elements with RFC and Internet-Draft'
                            ' seriesInfo with the appropriate XInclude element'
-                       )
-    formatoptions.add_option('', '--rfc', action='store_true',
-                           help='with --preptool: prep for an RFC'
                        )
     formatoptions.add_option('', '--liberal', action='store_true',
                            help='with --preptool: accept already prepped input'
@@ -165,8 +165,6 @@ def main():
         options.no_dtd = True
     if options.v2v3:
         options.vocabulary = 'v2'
-    if options.rfc and not options.preptool:
-        sys.exit('The --rfc option can be used only with --preptool')
     if options.basename:
         if options.output_path:
             sys.exit('--path and --basename has the same functionality, please use only --path')
@@ -225,6 +223,9 @@ def main():
         xml2rfc.log.exception('Unable to parse the XML document: ' + args[0], e.error_log)
         sys.exit(1)
         
+    # Remember if we're building an RFC
+    options.rfc = xmlrfc.tree.getroot().get('number')
+
     # Validate the document unless disabled
     if not options.no_dtd:
         ok, errors = xmlrfc.validate(dtd_path=options.dtd)
