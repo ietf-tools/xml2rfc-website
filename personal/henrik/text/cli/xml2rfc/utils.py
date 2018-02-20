@@ -5,6 +5,7 @@
 # Internal utitlity functions.  Not meant for public usage.
 
 import base64
+import calendar
 import re
 import six
 import textwrap
@@ -102,12 +103,15 @@ class TextWrapper(textwrap.TextWrapper):
             text = re.sub(re.escape(key), val, text)
         return text
 
-    def wrap(self, text, initial='', subsequent_indent=None,
+    def wrap(self, text, initial='', subsequent_indent=None, width=None,
         fix_doublespace=True, fix_sentence_endings=True, drop_whitespace=True):
         """ Mirrored implementation of wrap which replaces characters properly
             and also lets you easily specify indentation on the fly
         """
         # Set indentation
+        _width = self.width
+        if width != None:
+            self.width = width
         self.initial_indent = initial
         if subsequent_indent == None:
             self.subsequent_indent = initial
@@ -148,7 +152,9 @@ class TextWrapper(textwrap.TextWrapper):
         # Original implementation
         if self.fix_sentence_endings:
             self._fix_sentence_endings(chunks)
-        return self._wrap_chunks(chunks)
+        wrapped = self._wrap_chunks(chunks)
+        self.width = _width
+        return wrapped
 
     def fill(self, *args, **kwargs):
         return "\n".join(self.wrap(*args, **kwargs))
@@ -562,4 +568,13 @@ def build_dataurl(mime, data, base64enc=False):
         data = quote(data)
         url = "data:%s,%s" % (mime, data)
     return url
+
+def normalize_month(month):
+    if len(month) < 3:
+        xml2rfc.log.error("Expected a month name with at least 3 letters, found '%s'" % (month, ))
+    for i, m in enumerate(calendar.month_name):
+        if m and m.lower().startswith(month.lower()):
+            month = '%02d' % (i)
+    assert month.isdigit()
+    return month
 
