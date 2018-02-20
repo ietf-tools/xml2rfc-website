@@ -479,7 +479,7 @@
        attribute format { "default" | "title" | "counter" | "none" }?,
        attribute derivedContent { text }?,
        [ a:defaultValue = "of" ]
-       attribute displayFormat { "of" | "comma" | "parens" | "bare" }?,
+       attribute sectionFormat { "of" | "comma" | "parens" | "bare" }?,
        attribute section { text }?,
        attribute relative { text }?,
        attribute derivedLink { text }?,
