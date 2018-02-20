@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
+import calendar
 import datetime
+import textwrap
 
 from codecs import open
 from lxml import etree
+from collections import namedtuple
 
 try:
     import debug
@@ -14,13 +17,34 @@ except ImportError:
     pass
 
 
-from xml2rfc import log
+from xml2rfc import log, strings
 from xml2rfc.writers.base import default_options
 from xml2rfc import utils
 
 
-fill = utils.TextWrapper(width=69, fix_sentence_endings=True, break_on_hyphens=False).fill
+wrapper = utils.TextWrapper(width=72, fix_sentence_endings=True, break_on_hyphens=False)
 seen = set()
+index_item = namedtuple('indexitem', ['item', 'subitem', 'anchor', 'page', ])
+
+def indent(t, indent=3):
+    lines = []
+    for l in text.splitlines():
+        lines.append(' '*indent + l)
+    return '\n'.join(lines)
+
+def fill(*args, **kwargs):
+    return wrapper.fill(*args, **kwargs)
+
+def center(text, width=None, **kwargs):
+    # avoid centered text extending all the way to the margins
+    if width is None:
+        width = 72
+    kwargs['width'] = width-4
+    lines = wrapper.wrap(text, **kwargs)
+    for i in range(len(lines)):
+        lines[i] = lines[i].center(width).rstrip()
+    return '\n'.join(lines)
+
 
 class TextWriter:
 
@@ -29,7 +53,50 @@ class TextWriter:
         self.tree = xmlrfc.tree
         self.root = self.tree.getroot()
         self.options = options
+        self.date = date
+        self.index_items = []
+
         self.errors = []
+        if options.debug:
+            found_handlers = []
+            missing_handlers = []
+            for tag in self.element_tags:
+                func_name = "render_%s" % (tag,)
+                if getattr(self, func_name, False):
+                    found_handlers.append(func_name)
+                else:
+                    missing_handlers.append(func_name)
+            debug.pprint('found_handlers')
+            debug.show('len(found_handlers)')
+            debug.pprint('missing_handlers')
+            debug.show('len(missing_handlers)')
+
+    def msg(self, e, label, text):
+        lnum = getattr(e, 'sourceline')
+        file = getattr(e, 'base')
+        if lnum or file:
+            msg = "%s(%s): %s: %s" % (file or self.xmlrfc.source, lnum+1, label, text, )
+        else:
+            msg = "%s: %s" % (label, text, )
+        log.write(msg)
+        return msg
+
+    def note(self, e, text):
+        self.msg(e, 'Note', text)
+
+    def warn(self, e, text):
+        self.msg(e, 'Warning', text)
+
+    def err(self, e, text, trace=False):
+        msg = self.msg(e, 'Error', text)
+        if trace or self.options.debug:
+            raise RuntimeError(msg)
+        self.errors.append(msg)
+
+    def die(self, e, text, trace=False):
+        self.err(e, text, trace)
+        log.write("Cannot continue, quitting now")
+        sys.exit(1)
 
     def write(self, filename):
         """ Public method to write the XML document to a file """
@@ -53,21 +120,23 @@ class TextWriter:
         func_name = "render_%s" % (e.tag,)
         func = getattr(self, func_name, self.default_renderer)
         if func == self.default_renderer:
-            if not e.tag in seen:
-                log.warn("No renderer for <%s> found" % (e.tag, ))
+            if e.tag in self.__class__.deprecated_element_tags:
+                self.warn(e, "Was asked to render a deprecated element: <%s>", (e.tag, ))
+            elif not e.tag in seen:
+                self.warn(e, "No renderer for <%s> found" % (e.tag, ))
                 seen.add(e.tag)
-        return func(e, **kwargs)
+        return func(e)
 
-    def element(self, tag, **kwargs):
-        return etree.Element(tag, **kwargs)
+    def element(self, tag):
+        return etree.Element(tag)
 
     # --- fallback rendering functions ------------------------------------------
 
-    def default_renderer(self, e, **kwargs):
+    def default_renderer(self, e):
         # This is a fallback when a more specific function doesn't exist
         text = "<%s>:%s" % (e.tag, e.text or '')
         for c in e.getchildren():
-            ctext = self.render(c, **kwargs)
+            ctext = self.render(c)
             if isinstance(ctext, list):
                 ctext = "\n\n".join(ctext)
             if ctext is None:
@@ -77,163 +146,28 @@ class TextWriter:
         text += e.tail or ''
         return text
 
-    def parts_renderer(self, e, **kwargs):
+    def parts_renderer(self, e):
         parts = []
         for c in e.getchildren():
-            ctext = self.render(c, **kwargs)
+            ctext = self.render(c)
             if isinstance(ctext, list):
                 parts += ctext
             else:
                 parts.append(ctext)
         return parts
 
-    def inner_text_renderer(self, e, **kwargs):
+    def inner_text_renderer(self, e):
         text = e.text or ''
         for c in e.getchildren():
-            text += self.render(c, **kwargs)
+            text += self.render(c)
         return text
     
-    def text_renderer(self, e, **kwargs):
-        text = self.inner_text_renderer(e, **kwargs)
-        text += e.tail
+    def text_renderer(self, e):
+        text = self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
     # --- element rendering functions ------------------------------------------
-
-    def render_rfc(self, e, paginated=False, **kwargs):
-        parts = []
-        for c in e.getchildren():
-            ctext = self.render(c, **kwargs)
-            if isinstance(ctext, list):
-                parts += ctext
-            else:
-                parts.append(ctext)
-        if paginated:
-            text = self.page_join(parts)
-        else:
-            for part in parts:
-                if isinstance(part, tuple):
-                    debug.show('part')
-            text = "\n\n".join(parts)
-        return text
-
-    def render_link(self, e, **kwargs):
-        return ''
-
-    def render_front(self, e, **kwargs):
-        return self.parts_renderer(e, **kwargs)
-
-
-
-
-
-
-
-
-#    def render_email(self, e, **kwargs):
-#    def render_eref(self, e, **kwargs):
-#    def render_facsimile(self, e, **kwargs):
-#    def render_figure(self, e, **kwargs):
-#    def render_format(self, e, **kwargs):
-#    def render_iref(self, e, **kwargs):
-#    def render_keyword(self, e, **kwargs):
-#    def render_li(self, e, **kwargs):
-#    def render_list(self, e, **kwargs):
-#    def render_note(self, e, **kwargs):
-#    def render_ol(self, e, **kwargs):
-#    def render_organization(self, e, **kwargs):
-#    def render_phone(self, e, **kwargs):
-#    def render_postal(self, e, **kwargs):
-#    def render_postalLine(self, e, **kwargs):
-#    def render_postamble(self, e, **kwargs):
-#    def render_preamble(self, e, **kwargs):
-#    def render_refcontent(self, e, **kwargs):
-#    def render_reference(self, e, **kwargs):
-#    def render_referencegroup(self, e, **kwargs):
-#    def render_references(self, e, **kwargs):
-#    def render_region(self, e, **kwargs):
-#    def render_relref(self, e, **kwargs):
-#    def render_seriesInfo(self, e, **kwargs):
-#    def render_sourcecode(self, e, **kwargs):
-#    def render_spanx(self, e, **kwargs):
-#    def render_street(self, e, **kwargs):
-#    def render_strong(self, e, **kwargs):
-#    def render_sub(self, e, **kwargs):
-#    def render_sup(self, e, **kwargs):
-#    def render_table(self, e, **kwargs):
-#    def render_tbody(self, e, **kwargs):
-#    def render_td(self, e, **kwargs):
-#    def render_texttable(self, e, **kwargs):
-#    def render_tfoot(self, e, **kwargs):
-#    def render_th(self, e, **kwargs):
-#    def render_thead(self, e, **kwargs):
-#    def render_title(self, e, **kwargs):
-#    def render_tr(self, e, **kwargs):
-#    def render_tt(self, e, **kwargs):
-#    def render_ttcol(self, e, **kwargs):
-#    def render_ul(self, e, **kwargs):
-#    def render_uri(self, e, **kwargs):
-#    def render_vspace(self, e, **kwargs):
-#    def render_workgroup(self, e, **kwargs):
-#    def render_xref(self, e, **kwargs):
-
-    def render_middle(self, e, **kwargs):
-        return self.parts_renderer(e, **kwargs)
-
-    def render_section(self, e, **kwargs):
-        parts = []
-        kwargs.update(e.items())
-        pn = kwargs['pn']
-        num = pn.split('-')[1].capitalize()
-        children = e.getchildren()
-        if children[0].tag == 'name':
-            name = children[0]
-            children = children[1:]
-            title = "%s.  %s" % (num, self.render(name, label=None, **kwargs))
-        else:
-            title = "%s." % (num, )
-        parts.append(title)
-        for c in children:
-            ctext = self.render(c, **kwargs)
-            if isinstance(ctext, list):
-                parts += ctext
-            else:
-                parts.append(ctext)
-        return parts
-
-    def render_name(self, e, label=None, pn=None, **kwargs):
-        return self.inner_text_renderer(e, **kwargs).strip()
-
-#    def render_t(self, e, **kwargs):
-    def render_t(self, e, indent=3, **kwargs):
-        text = self.inner_text_renderer(e, **kwargs)
-        text = fill(text, initial=' '*indent)
-        return text
-
-    def render_figure(self, e, **kwargs):
-        parts = []
-        kwargs.update(e.items())
-        pn = kwargs['pn']
-        num = pn.split('-')[1].capitalize()
-        children = e.getchildren()
-        if children[0].tag == 'name':
-            name = children[0]
-            children = children[1:]
-            title = "Figure %s: %s" % (num, self.render(name, label=None, **kwargs))
-        else:
-            title = "Figure %s" % (num, )
-        for c in children:
-            ctext = self.render(c, indent=0, **kwargs)
-            if isinstance(ctext, list):
-                parts += ctext
-            else:
-                parts.append(ctext)
-        parts.append('   '+title.center(69).rstrip())
-        return parts
-
-
-
-
 
     # 2.1.  <abstract>
     # 
@@ -247,14 +181,16 @@ class TextWriter:
     # 2.1.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the Abstract.
-#    def render_abstract(self, e, **kwargs):
+    def render_abstract(self, e):
+        parts = ["Abstract"]
+        parts += self.parts_renderer(e)
+        return parts
 
     # 2.2.  <address>
     # 
     #    Provides address information for the author.
     # 
     #    This element appears as a child element of <author> (Section 2.7).
-#    def render_address(self, e, **kwargs):
 
     # 2.3.  <annotation>
     # 
@@ -264,7 +200,6 @@ class TextWriter:
     # 
     #    This element appears as a child element of <reference>
     #    (Section 2.40).
-#    def render_annotation(self, e, **kwargs):
 
 
     # 2.4.  <area>
@@ -278,7 +213,6 @@ class TextWriter:
     #    Editor.
     # 
     #    This element appears as a child element of <front> (Section 2.26).
-#    def render_area(self, e, **kwargs):
 
 
     # 2.5.  <artwork>
@@ -331,7 +265,6 @@ class TextWriter:
     # 
     #    See Section 5 for a description of how to deal with issues of using
     #    "&" and "<" characters in artwork.
-#    def render_artwork(self, e, **kwargs):
 
 
     # 2.5.1.  "align" Attribute
@@ -438,7 +371,6 @@ class TextWriter:
     # 2.6.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this aside.
-#    def render_aside(self, e, **kwargs):
 
 
     # 2.7.  <author>
@@ -510,8 +442,41 @@ class TextWriter:
     #    The author's surname, to be used in conjunction with the separately
     #    specified initials.  It usually appears on the front page, in
     #    footers, and in references.
-#    def render_author(self, e, **kwargs):
-
+    def render_front_author(self, e):
+        ascii_initials = e.get('asciiInitials', '').strip()
+        if ascii_initials and not ascii_initials.endswith('.'):
+            ascii_initials += '.'
+        ascii_surname  = e.get('asciiSurname', '').strip()
+        initials = e.get('initials', '').strip()
+        if initials and not initials.endswith('.'):
+            initials += '.'
+        surname  = e.get('surname', '').strip()
+        if (   initials and ascii_initials
+            or surname  and ascii_surname):
+            name = '%s %s (%s %s)' % (initials, surname, ascii_initials, ascii_surname)
+        elif initials and surname:
+            name = '%s %s' % (initials, surname)
+        elif surname:
+            name = surname
+        elif initials:
+            self.warn(e, "Expected an author surname to go with initials, but found none: %s" % (etree.tostring(e), ))
+            name = None
+        else:
+            self.warn(e, "Expected author surname and initials for the front page rendering, but found none: %s" % (etree.tostring(e), ))
+        #
+        o = e.find('./organization')
+        if o != None:
+            organization = self.render_front_organization(o)
+        else:
+            organization = None
+        #
+        if organization and not name:
+            name = organization
+            organization = None
+        #
+        if e.get('role') == 'editor':
+            name += ', Ed.'
+        return name, organization
 
     # 2.8.  <back>
     # 
@@ -519,8 +484,8 @@ class TextWriter:
     #    appendices.  In <back>, <section> elements indicate appendices.
     # 
     #    This element appears as a child element of <rfc> (Section 2.45).
-    def render_back(self, e, **kwargs):
-        return self.parts_renderer(e, **kwargs)
+    def render_back(self, e):
+        return self.parts_renderer(e)
 
 
     # 2.9.  <bcp14>
@@ -543,7 +508,6 @@ class TextWriter:
     #    (Section 2.56), <th> (Section 2.58), and <tt> (Section 2.62).
     # 
     #    Content model: only text content.
-#    def render_bcp14(self, e, **kwargs):
 
 
     # 2.10.  <blockquote>
@@ -567,7 +531,6 @@ class TextWriter:
     #    Name of person or document the text in this element is quoted from.
     #    A formatter should render this as visible text at the end of the
     #    quotation.
-#    def render_blockquote(self, e, **kwargs):
 
 
     # 2.11.  <boilerplate>
@@ -579,10 +542,14 @@ class TextWriter:
     #    this element must have the "numbered" attribute set to "false".
     # 
     #    This element appears as a child element of <front> (Section 2.26).
-    def render_boilerplate(self, e, **kwargs):
-        assert kwargs.get('numbered') == 'false'
-        return self.render_section(e, **kwargs)
-
+    def render_boilerplate(self, e):
+        parts = []
+        for c in e.getchildren():
+            numbered = c.get('numbered')
+            if not numbered == 'false':
+                self.err(c, "Expected boilerplate section to have numbered='false', but found '%s'" % (numbered, ))
+            parts += self.render(c)
+        return parts
 
     # 2.12.  <br>
     # 
@@ -592,7 +559,6 @@ class TextWriter:
     # 
     #    This element appears as a child element of <td> (Section 2.56) and
     #    <th> (Section 2.58).
-#    def render_br(self, e, **kwargs):
 
 
     # 2.13.  <city>
@@ -604,7 +570,6 @@ class TextWriter:
     # 2.13.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the city name.
-#    def render_city(self, e, **kwargs):
 
 
     # 2.14.  <code>
@@ -616,7 +581,6 @@ class TextWriter:
     # 2.14.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the postal code.
-#    def render_code(self, e, **kwargs):
 
 
     # 2.15.  <country>
@@ -628,7 +592,6 @@ class TextWriter:
     # 2.15.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the country name.
-#    def render_country(self, e, **kwargs):
 
 
     # 2.16.  <cref>
@@ -669,7 +632,6 @@ class TextWriter:
     # 
     #    Holds the "source" of a comment, such as the name or the initials of
     #    the person who made the comment.
-#    def render_cref(self, e, **kwargs):
 
 
     # 2.17.  <date>
@@ -716,8 +678,30 @@ class TextWriter:
     # 2.17.3.  "year" Attribute
     # 
     #    The year or years of publication.
-#    def render_date(self, e, **kwargs):
-
+    def render_date(self, e):
+        #pp = e.getparent().getparent()
+        #if pp.tag == 'rfc':
+        today = self.date
+        day = e.get('day')
+        month = e.get('month')
+        year = e.get('year')
+        #
+        date = ''
+        if day:
+            date += '%s ' % day
+        if not month:
+            if year == today.year:
+                month = today.month
+        else:
+            if not month.isdigit():
+                month = utils.normalize_month(month)
+            month = int(month)
+        if month:
+            month = calendar.month_name[month]
+            date += '%s %s' % (month, year)
+        else:
+            date += '%s' % year
+        return date
 
     # 2.18.  <dd>
     # 
@@ -728,7 +712,6 @@ class TextWriter:
     # 2.18.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this definition.
-#    def render_dd(self, e, **kwargs):
 
 
     # 2.19.  <displayreference>
@@ -765,7 +748,7 @@ class TextWriter:
     #    given must start with one of the following characters: 0-9, a-z, or
     #    A-Z.  The other characters in the string must be 0-9, a-z, A-Z, "-",
     #    ".", or "_".
-    def render_displayreference(self, e, **kwargs):
+    def render_displayreference(self, e):
         return ''
 
 
@@ -809,7 +792,6 @@ class TextWriter:
     #    o  "normal" (default)
     # 
     #    o  "compact"
-#    def render_dl(self, e, **kwargs):
 
 
     # 2.21.  <dt>
@@ -821,7 +803,6 @@ class TextWriter:
     # 2.21.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this term.
-#    def render_dt(self, e, **kwargs):
 
 
     # 2.22.  <em>
@@ -830,10 +811,10 @@ class TextWriter:
     #    this element will be displayed as italic after processing.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_em(self, e, **kwargs):
+    def render_em(self, e):
         # Render text with leading and trailing '_'
-        text = '_%s_' % self.inside_text_renderer(e, **kwargs)
-        text += e.tail
+        text = '_%s_' % self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
     # 2.23.  <email>
@@ -982,7 +963,26 @@ class TextWriter:
     # 2.25.8.  "width" Attribute
     # 
     #    Deprecated.
-    # 
+    def render_figure(self, e):
+        parts = []
+        pn = e.get('pn')
+        num = pn.split('-')[1].capitalize()
+        children = e.getchildren()
+        if children[0].tag == 'name':
+            name = children[0]
+            children = children[1:]
+            title = "Figure %s: %s" % (num, self.render(name, label=None))
+        else:
+            title = "Figure %s" % (num, )
+        for c in children:
+            ctext = self.render(c, indent=0)
+            if isinstance(ctext, list):
+                parts += ctext
+            else:
+                parts.append(ctext)
+        parts.append('   '+center(title, width=69).rstrip())
+        return parts
+
     # 2.26.  <front>
     # 
     #    Represents the "front matter": metadata (such as author information),
@@ -1004,26 +1004,217 @@ class TextWriter:
     # 
     #    In this order:
     # 
-    #    1.   One <title> element (Section 2.60)
+    # ...
     # 
-    #    2.   Optional <seriesInfo> elements (Section 2.47)
-    # 
-    #    3.   One or more <author> elements (Section 2.7)
-    # 
-    #    4.   One optional <date> element (Section 2.17)
-    # 
-    #    5.   Optional <area> elements (Section 2.4)
-    # 
-    #    6.   Optional <workgroup> elements (Section 2.65)
-    # 
-    #    7.   Optional <keyword> elements (Section 2.28)
-    # 
-    #    8.   One optional <abstract> element (Section 2.1)
-    # 
-    #    9.   Optional <note> elements (Section 2.33)
-    # 
-    #    10.  One optional <boilerplate> element (Section 2.11)
-    # 
+    def render_front(self, e):
+        if e.getparent().tag == 'reference':
+            return self.render_reference_front(e)
+        else:
+            parts = []
+            parts.append(self.render_first_page_top(e))
+            for c in e.getchildren():
+                if c.tag in ['title', 'seriesInfo', 'author', 'date', 'area', 'workgroup', 'keyword']:
+                    # handled in render_first_page_top()
+                    continue
+                parts += self.render(c)
+        return parts
+
+    def render_first_page_top(self, e):
+        def join(left, right):
+            "Join left and right columns of page top into page top text"
+            l = max(len(left), len(right))
+            left  += ['']*(l-len(left))
+            right += ['']*(l-len(right))
+            lines = []
+            t = len(left)
+            for i in range(t):
+                l = left[i]
+                r = right[i]
+                assert len(l)+len(r)<70
+                w = 72-len(l)-len(r)
+                lines.append(l+' '*w+r)
+            return '\n'.join(lines)+'\n'
+        #
+        def wrap(label, items, suffix=''):
+            wrapper = textwrap.TextWrapper(width=48, subsequent_indent=' '*len('%s: '%label))
+            line = '%s%s%s' % (label, items, suffix)
+            return wrapper.wrap(line)
+        #
+        def get_left(front):
+            "Get front page top left column"
+            #left_parts = ['source', 'seriesInfo', 'obsoletes', 'updates', 'category', 'issn', 'expires', ]
+            left = []
+            if self.options.rfc:
+                # 
+                #    There is a set of additional information that is needed at the front
+                #    of the RFC.  Historically, this has been presented with the
+                #    information below in a left hand column, and the author-related
+                #    information described above in the right.
+                # 
+                #    <document source>  This describes the area where the work originates.
+                #       Historically, all RFCs were labeled "Network Working Group".
+                #       Network Working Group refers to the original version of today's
+                #       IETF when people from the original set of ARPANET sites and
+                #       whomever else was interested -- the meetings were open -- got
+                #       together to discuss, design, and document proposed protocols
+                #       [RFC3].  Here, we obsolete the term "Network Working Group" in
+                #       order to indicate the originating stream.
+                # 
+                #       The <document source> is the name of the RFC stream, as defined in
+                #       [RFC4844] and its successors.  At the time of this publication,
+                #       the streams, and therefore the possible entries are:
+                # 
+                #       *  Internet Engineering Task Force
+                #       *  Internet Architecture Board
+                #       *  Internet Research Task Force
+                #       *  Independent Submission
+                stream_text = {
+                    'IETF':         'Internet Engineering Task Force',
+                    'IAB':          'Internet Architecture Board',
+                    'IRTF':         'Internet Research Task Force',
+                    'independent':  'Independent Submission',
+                }
+                stream = self.root.get('submissionType')
+                left.append(stream_text[stream])
+                #
+                #    Request for Comments:  <RFC number>  This indicates the RFC number,
+                #       assigned by the RFC Editor upon publication of the document.  This
+                #       element is unchanged.
+                left.append("Request for Comments: %s" % self.options.rfc)
+                #    <subseries ID> <subseries number>  Some document categories are also
+                #       labeled as a subseries of RFCs.  These elements appear as
+                #       appropriate for such categories, indicating the subseries and the
+                #       documents number within that series.  Currently, there are
+                #       subseries for BCPs [RFC2026] and STDs [RFC1311].  These subseries
+                #       numbers may appear in several RFCs.  For example, when a new RFC
+                #       obsoletes or updates an old one, the same subseries number is
+                #       used.  Also, several RFCs may be assigned the same subseries
+                #       number: a single STD, for example, may be composed of several
+                #       RFCs, each of which will bear the same STD number.  This element
+                #       is unchanged.
+                category = self.root.get('category', '')
+                series_no = self.root.get('seriesNo')
+                if category and category in strings.series_name and series_no:
+                    left.append('%s: %s' % (strings.series_name[category], series_number))
+                else:
+                    pass
+                #    [<RFC relation>:<RFC number[s]>]  Some relations between RFCs in the
+                #       series are explicitly noted in the RFC header.  For example, a new
+                #       RFC may update one or more earlier RFCs.  Currently two
+                #       relationships are defined: "Updates" and "Obsoletes" [RFC7322].
+                #       Variants like "Obsoleted by" are also used (e.g, in [RFC5143]).
+                #       Other types of relationships may be defined by the RFC Editor and
+                #       may appear in future RFCs.
+                obsoletes = self.root.get('obsoletes')
+                if obsoletes:
+                    left += wrap('Obsoletes: ', obsoletes)
+                updates = self.root.get('updates')
+                if updates:
+                    left += wrap('Updates: ', updates)
+                #    Category: <category>  This indicates the initial RFC document
+                #       category of the publication.  These are defined in [RFC2026].
+                #       Currently, this is always one of: Standards Track, Best Current
+                #       Practice, Experimental, Informational, or Historic.  This element
+                #       is unchanged.
+                if category:
+                    if category in strings.category:
+                        left.append('Category: %s' % (strings.category[category], ))
+                    else:
+                        self.warn(self.root, "Expected a known category, one of %s, but found '%s'" % (','.join(strings.category.keys()), category, ))
+                else:
+                    self.warn(self.root, "Expected a category, one of %s, but found none" % (','.join(strings.category.keys()), ))
+                #
+                left.append('ISSN: 2070-1721')
+                #
+            else:
+                # Internet-Draft
+                group = front.find('workgroup')
+                if group is None:
+                    left.append('Network Working Group')
+                else:
+                    left.append(group.text.strip())
+                left.append('Internet-Draft')
+                #
+                category = self.root.get('category', '')
+                series_no = self.root.get('seriesNo')
+                if category and not category in strings.series_name:
+                    self.warn(self.root, "Expected a known category, one of %s, but found '%s'" % (','.join(strings.series_name.keys()), category, ))
+                elif category and series_no:
+                    left.append('%s: %s (if approved)' % (strings.series_name[category], series_number))
+                else:
+                    pass
+                #
+                obsoletes = self.root.get('obsoletes')
+                if obsoletes:
+                    left += wrap('Obsoletes', obsoletes, ' (if approved)')
+                updates = self.root.get('updates')
+                if updates:
+                    left += wrap('Updates', updates, ' (if approved)')
+                #
+                if category:
+                    if category in strings.category:
+                        left.append('Intended Status: %s' % (strings.category[category], ))
+                    else:
+                        self.warn(self.root, "Expected a known category, one of %s, but found '%s'" % (','.join(strings.category.keys()), category, ))
+                else:
+                    self.warn(self.root, "Expected a category, one of %s, but found none" % (','.join(strings.category.keys()), ))
+                #
+            return left
+        #
+        def get_right(front):
+            "Get front page top right column"
+            # RFC 7841           RFC Streams, Headers, Boilerplates           May 2016
+            # 
+            # 3.1.  The Title Page Header
+            # 
+            #    The information at the front of the RFC includes the name and
+            #    affiliation of the authors as well as the RFC publication month and
+            #    year.
+            # 
+            #-------------------------------------------------------------------------
+            # 
+            # RFC 7322                     RFC Style Guide              September 2014
+            # 
+            # 4.1.2.  Organization
+            # 
+            #    The author's organization is indicated on the line following the
+            #    author's name.
+            # 
+            #    For multiple authors, each author name appears on its own line,
+            #    followed by that author's organization.  When more than one author is
+            #    affiliated with the same organization, the organization can be
+            #    "factored out," appearing only once following the corresponding
+            #    Author lines.  However, such factoring is inappropriate when it would
+            #    force an unacceptable reordering of author names.
+            right = []
+            auth = namedtuple('author', ['name', 'org'])
+            prev = auth(None, None)
+            authors = front.xpath('./author')
+            for a in authors:
+                this = auth(*self.render_front_author(a))
+                if right and this.name and this.org and this.org == prev.org:
+                    right[-1] = this.name
+                    right.append(this.org)
+                else:
+                    if this.name:
+                        right.append(this.name)
+                    if this.org:
+                        right.append(this.org)
+                prev = this
+            right.append(self.render_date(front.find('./date')))
+            return right
+        #
+        left  = get_left(e)
+        right = get_right(e)
+        #
+        first_page_header = join(left, right)
+        first_page_header += '\n\n'
+        first_page_header += self.render_title(e.find('./title'))
+        return first_page_header
+
+    def render_reference_front(self, e):
+        return self.default_renderer(e)
+
     # 2.27.  <iref>
     # 
     #    Provides terms for the document's index.
@@ -1052,7 +1243,11 @@ class TextWriter:
     #    (Section 3.9).
     # 
     #    Content model: this element does not have any contents.
-    # 
+    def render_iref(self, e):
+        p = e.getparent()
+        self.index_items.append(index_item(e.get('item'), e.get('subitem'), p.get('pn'), None))
+        return ''
+
     # 2.27.1.  "item" Attribute (Mandatory)
     # 
     #    The item to include.
@@ -1179,7 +1374,9 @@ class TextWriter:
     #    This element appears as a child element of <rfc> (Section 2.45).
     # 
     #    Content model: this element does not have any contents.
-    # 
+    def render_link(self, e):
+        return ''
+
     # 2.30.1.  "href" Attribute (Mandatory)
     # 
     #    The URI of the external document.
@@ -1199,7 +1396,9 @@ class TextWriter:
     #    Content model:
     # 
     #    One or more <section> elements (Section 2.46)
-    # 
+    def render_middle(self, e):
+        return self.parts_renderer(e)
+
     # 2.32.  <name>
     # 
     #    The name of the section, note, figure, or texttable.  This name can
@@ -1226,7 +1425,9 @@ class TextWriter:
     #    o  <tt> elements (Section 2.62)
     # 
     #    o  <xref> elements (Section 2.66)
-    # 
+    def render_name(self, e, label=None, pn=None):
+        return self.inner_text_renderer(e).strip()
+
     # 2.33.  <note>
     # 
     #    Creates an unnumbered, titled block of text that appears after the
@@ -1253,7 +1454,13 @@ class TextWriter:
     #        *  <t> elements (Section 2.53)
     # 
     #        *  <ul> elements (Section 2.63)
-    # 
+    def render_note(self, e):
+        parts = []
+        if e[0].tag != 'name':
+            parts.append("Note")
+        parts += self.parts_renderer(e)
+        return parts
+
     # 2.33.1.  "removeInRFC" Attribute
     # 
     #    If set to "true", this note is marked in the prep tool with text
@@ -1362,7 +1569,8 @@ class TextWriter:
     # 
     #    If no type attribute is given, the default type is the same as
     #    "type='%d.'".
-    # 
+
+
     # 2.35.  <organization>
     # 
     #    Specifies the affiliation [RFC7322] of an author.
@@ -1383,7 +1591,19 @@ class TextWriter:
     # 2.35.2.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the organization's name.
-    # 
+    def render_front_organization(self, e):
+        abbrev = e.get('abbrev')
+        if abbrev:
+            org = abbrev.strip()
+        else:
+            org = e.text or ''
+            org = org.strip()
+        if org:
+            ascii = e.get('ascii')
+            if ascii:
+                org += ' (%s)' % ascii.strip()
+        return org
+
     # 2.36.  <phone>
     # 
     #    Represents a phone number.
@@ -1778,7 +1998,23 @@ class TextWriter:
     #    3.  One <middle> element (Section 2.31)
     # 
     #    4.  One optional <back> element (Section 2.8)
-    # 
+    def render_rfc(self, e, paginated=False):
+        parts = []
+        for c in e.getchildren():
+            ctext = self.render(c)
+            if isinstance(ctext, list):
+                parts += ctext
+            else:
+                parts.append(ctext)
+        if paginated:
+            text = self.page_join(parts)
+        else:
+            for part in parts:
+                if isinstance(part, tuple):
+                    debug.show('part')
+            text = "\n\n".join(parts)
+        return text
+
     # 2.45.1.  "category" Attribute
     # 
     #    Deprecated; instead, use the "name" attribute in <seriesInfo>.
@@ -2018,7 +2254,29 @@ class TextWriter:
     #    o  "exclude"
     # 
     #    o  "default" (default)
-    # 
+    def render_section(self, e):
+        parts = []
+        pn = e.get('pn')
+        if e.get('numbered') == 'true':
+            num = pn.split('-')[1].capitalize() +'.  '
+        else:
+            num = ''
+        children = e.getchildren()
+        if children[0].tag == 'name':
+            name = children[0]
+            children = children[1:]
+            title = "%s%s" % (num, self.render(name, label=None))
+        else:
+            title = "%s" % (num, )
+        parts.append(title.strip())
+        for c in children:
+            ctext = self.render(c)
+            if isinstance(ctext, list):
+                parts += ctext
+            else:
+                parts.append(ctext)
+        return parts
+
     # 2.47.  <seriesInfo>
     # 
     #    Specifies the document series in which this document appears, and
@@ -2243,10 +2501,10 @@ class TextWriter:
     #    this element will be displayed as bold after processing.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_strong(self, e, **kwargs):
+    def render_strong(self, e):
         # Render text with leading and trailing '_'
-        text = '*%s*' % self.inside_text_renderer(e, **kwargs)
-        text += e.tail
+        text = '*%s*' % self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
 
@@ -2256,10 +2514,10 @@ class TextWriter:
     #    letter-height lower than normal text.  This element can be combined
     #    with other character formatting elements, and the formatting will be
     #    additive.
-    def render_sub(self, e, **kwargs):
+    def render_sub(self, e):
         # Render text with leading and trailing '_'
-        text = '_(%s)' % self.inside_text_renderer(e, **kwargs)
-        text += e.tail
+        text = '_(%s)' % self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
 
@@ -2269,10 +2527,10 @@ class TextWriter:
     #    letter-height higher than normal text.  This element can be combined
     #    with other character formatting elements, and the formatting will be
     #    additive.
-    def render_sup(self, e, **kwargs):
+    def render_sup(self, e):
         # Render text with leading and trailing '_'
-        text = '^(%s)' % self.inside_text_renderer(e, **kwargs)
-        text += e.tail
+        text = '^(%s)' % self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
 
@@ -2359,7 +2617,11 @@ class TextWriter:
     #    o  "false" (default)
     # 
     #    o  "true"
-    # 
+    def render_t(self, e, indent=3):
+        text = self.inner_text_renderer(e)
+        text = fill(text.strip(), initial=' '*indent)
+        return text
+
     # 2.54.  <table>
     # 
     #    Contains a table with a caption with the table number.  If the
@@ -2611,7 +2873,7 @@ class TextWriter:
     # 2.59.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the thead.
-    # 
+
     # 2.60.  <title>
     # 
     #    Represents the document title.
@@ -2624,7 +2886,18 @@ class TextWriter:
     #    This element appears as a child element of <front> (Section 2.26).
     # 
     #    Content model: only text content.
-    # 
+    def render_title(self, e):
+        pp = e.getparent().getparent()
+        if self.options.rfc:
+            return center(fill(e.text.strip()))
+        else:
+            title = center(fill(e.text.strip()))
+            if pp.tag == 'rfc':
+                doc_name = self.root.get('docName')
+                if doc_name:
+                    title += '\n'+doc_name.strip().center(72).rstrip()
+            return title
+
     # 2.60.1.  "abbrev" Attribute
     # 
     #    Specifies an abbreviated variant of the document title.
@@ -2657,10 +2930,10 @@ class TextWriter:
     #    Causes the text to be displayed in a constant-width font.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_tt(self, e, **kwargs):
+    def render_tt(self, e):
         # Render text with leading and trailing '_'
-        text = '<%s>' % self.inside_text_renderer(e, **kwargs)
-        text += e.tail
+        text = '<%s>' % self.inner_text_renderer(e)
+        text += e.tail or ''
         return text
 
 
@@ -2752,7 +3025,14 @@ class TextWriter:
     #    (Section 2.62), and <ttcol> (Section 3.9).
     # 
     #    Content model: only text content.
-    # 
+    def render_xref(self, e):
+        text = e.get('derivedContent')
+        if text is None:
+            self.die(e, "Found an <xref> without derivedContent")
+        if e.tail:
+            text += e.tail
+        return text
+        
     # 2.66.1.  "format" Attribute
     # 
     #    This attribute signals to formatters what the desired format of the
@@ -2840,3 +3120,104 @@ class TextWriter:
     #    to match the value of the "anchor" attribute of an element in the
     #    document; otherwise, it is an error.
 
+    # --- class variables ------------------------------------------------------
+
+    element_tags = [
+        'abstract',
+        'address',
+        'annotation',
+        'artwork',
+        'aside',
+        'author',
+        'back',
+        'bcp14',
+        'blockquote',
+        'boilerplate',
+        'br',
+        'city',
+        'code',
+        'country',
+        'cref',
+        'date',
+        'dd',
+        'displayreference',
+        'dl',
+        'dt',
+        'em',
+        'email',
+        'eref',
+        'figure',
+        'front',
+        'iref',
+        'li',
+        'link',
+        'middle',
+        'name',
+        'note',
+        'ol',
+        'organization',
+        'phone',
+        'postal',
+        'postalLine',
+        'refcontent',
+        'reference',
+        'referencegroup',
+        'references',
+        'region',
+        'relref',
+        'rfc',
+        'section',
+        'seriesInfo',
+        'sourcecode',
+        'street',
+        'strong',
+        'sub',
+        'sup',
+        't',
+        'table',
+        'tbody',
+        'td',
+        'tfoot',
+        'th',
+        'thead',
+        'title',
+        'tr',
+        'tt',
+        'ul',
+        'uri',
+        'xref',
+    ]
+    deprecated_element_tags = [
+        'list',
+        'spanx',
+        'vspace',
+        'c',
+        'texttable',
+        'ttcol',
+        'facsimile',
+        'format',
+        'preamble',
+        'postamble',
+    ]
+    unused_front_element_renderers = [
+        'area',
+        'keyword',
+        'workgroup',
+    ]
+    all_element_tags = element_tags + deprecated_element_tags + unused_front_element_renderers
+    deprecated_attributes = [
+        # element, attrbute
+        ('figure', 'align'),
+        ('section', 'title'),
+        ('note', 'title'),
+        ('figure', 'title'),
+        ('references', 'title'),
+        ('texttable', 'title'),
+        ('figure', 'src'),
+        ('artwork', 'xml:space'),
+        ('artwork', 'height'),
+        ('artwork', 'width'),
+        ('figure', 'height'),
+        ('figure', 'width'),
+        ('xref', 'pageno'),
+    ]
