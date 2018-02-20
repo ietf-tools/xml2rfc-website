@@ -11,6 +11,7 @@ import sys
 import unicodedata
 
 from codecs import open
+from collections import namedtuple
 
 try:
     import debug
@@ -37,12 +38,28 @@ from xml2rfc.writers.base import default_options
 from xml2rfc.writers.v2v3 import slugify
 from xml2rfc.scripts import get_scripts
 
-ns={
-    'x':'http://relaxng.org/ns/structure/1.0',
-    'a':'http://relaxng.org/ns/compatibility/annotations/1.0',
+namespaces={
+    'x':    'http://relaxng.org/ns/structure/1.0',
+    'a':    'http://relaxng.org/ns/compatibility/annotations/1.0',
+    'xml':  'http://www.w3.org/XML/1998/namespace',
+}
+
+pnprefix = {
+    # tag: prefix
+    'abstract':     'section',
+    'back/section': 'appendix',
+    'boilerplate':  'section',
+    'figure':       'figure',
+    'iref':         'iref',
+    'note':         'section',
+    'references':   'section',
+    'section':      'section',
+    'table':        'table',
 }
 
 refname_mapping = {}
+
+index_item = namedtuple('index_item', ['item', 'sub', 'anchor', 'page', ])
 
 def normalize_month(month):
     months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -84,6 +101,7 @@ class PrepToolWriter:
         self.xmlrfc = xmlrfc
         self.tree = xmlrfc.tree
         self.root = self.tree.getroot()
+        self.rfcnumber = self.root.get('number')
         self.options = options
         self.errors = []
         self.ol_counts = {}
@@ -105,26 +123,31 @@ class PrepToolWriter:
         self.prev_paragraph_section = None
         #
         self.liberal = liberal if liberal != None else options.liberal
+        #
+        self.index_entries = []
 
     def get_attribute_names(self, tag):
-        attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=ns)
+        attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=namespaces)
         names = [ a.get('name') for a in attr ]
         return names
         
     def get_attribute_defaults(self, tag):
         if not tag in self.attribute_defaults:
-            deprecated_attributes = set(['keepWithNext', 'keepWithPrevious', 'toc', 'pageno', ])
-            attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=ns)
-            defaults = dict( (a.get('name'), a.get("{%s}defaultValue"%ns['a'], None)) for a in attr )
-            keys = list( set(defaults.keys()) - deprecated_attributes)
+            ignored_attributes = set(['keepWithNext', 'keepWithPrevious', 'toc', 'pageno', 'displayFormat', ])
+            attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=namespaces)
+            defaults = dict( (a.get('name'), a.get("{%s}defaultValue"%namespaces['a'], None)) for a in attr )
+            keys = list( set(defaults.keys()) - ignored_attributes)
             keys.sort()
             self.attribute_defaults[tag] = OrderedDict( (k, defaults[k]) for k in keys if defaults[k] )
-        return self.attribute_defaults[tag]
+        return copy.copy(self.attribute_defaults[tag])
 
-    def element(self, tag, **kwargs):
+    def element(self, tag, line=None, **kwargs):
         attrib = self.get_attribute_defaults(tag)
         attrib.update(kwargs)
-        return etree.Element(tag, **attrib)
+        e = etree.Element(tag, **attrib)
+        if line:
+            e.sourceline = line
+        return e
 
     def note(self, e, text):
         lnum = getattr(e, 'sourceline', 0)
@@ -239,6 +262,7 @@ class PrepToolWriter:
             './/relref',                        # 5.4.9.  <relref> Processing
             './/artwork',                       # 5.5.1.  <artwork> Processing
             './/sourcecode',                    # 5.5.2.  <sourcecode> Processing
+            './back;insert_index()',
             './/*[@removeInRFC="true"]',        # 5.6.1.  <note> Removal
             './/cref;removal()',                # 5.6.2.  <cref> Removal
                                                 # 5.6.3.  <link> Processing
@@ -341,7 +365,7 @@ class PrepToolWriter:
     ## modified to use "section-", "figure-", "table-", "index-"
 
     def attribute_anchor(self, e, p):
-        reserved = ["section-", "figure-", "table-", "index-", ]
+        reserved = set([ '%s-'%v for v in pnprefix.values() ])
         k = 'anchor'
         if k in e.keys():
             v = e.get(k)
@@ -388,14 +412,14 @@ class PrepToolWriter:
             path, base = os.path.split(self.options.output_filename)
             name, ext  = base.split('.', 1)
             if self.options.rfc:
-                if not name.starswith('rfc'):
+                if not name.startswith('rfc'):
                     self.die(e, "Expected a filename starting with 'rfc' in --rfc mode, but found '%s'" % (name, ))
                 num = name[3:]
                 if not num.isdigit():
                     self.die(e, "Expected to find the RFC number in the file name in --rfc mode, but found '%s'" % (num, ))
-                e.insert(pos, etree.Element('seriesInfo', name='RFC', value=self.rfcnumber))
+                e.insert(pos, self.element('seriesInfo', name='RFC', value=self.rfcnumber))
             else:
-                e.insert(pos, etree.Element('seriesInfo', name='Internet-Draft', value=name))
+                e.insert(pos, self.element('seriesInfo', name='Internet-Draft', value=name))
         else:
             if self.options.rfc:
                 rfcinfo = e.find('./seriesInfo[@name="RFC"]')
@@ -429,7 +453,6 @@ class PrepToolWriter:
                 # XXX: This changes RFC Editor policy on publication dates, and is
                 # probably not what was intended
                 self.warn(e, "Expected explicit values for year, month, and day, but found %s, %s and %s" % (year, month, day))
-                day = "1"
             if month and not month.isdigit():
                 if len(month) < 3:
                     self.err("Expected a month name with at least 3 letters, found '%s'" % (month, ))
@@ -438,20 +461,20 @@ class PrepToolWriter:
                 year = str(today.year)
             if not month:
                 if not year == str(today.year):
-                    self.die(e, "Expected <date> to have the current year, when month is missing, but found '%s'" % (d.get('year')))
+                    self.die(e, "Expected <date> to have the current year when month is missing, but found '%s'" % (d.get('year')))
                 month = today.strftime('%m')
-
             if not day:
                 if not (year == str(today.year) and month == today.strftime('%m')):
                     self.warn(e, "Expected <date> to have the current month when day is missing, but found '%s'" % (d.get('month')))
-                    day = '01'
                 else:
                     day = today.strftime('%d')
-            datestr = "%s-%s-%s" %(year, month, day)
+            datestr = "%s-%s-%s" %(year, month, day or '01')
             date = datetime.datetime.strptime(datestr, "%Y-%m-%d").date()
             if abs(date - datetime.date.today()) > datetime.timedelta(days=3):
                 self.warn(e, "The document date (%s) is more than 3 days away from today's date" % date)
-            n = self.element('date', year=year, month=month, day=day)
+            n = self.element('date', year=year, month=month)
+            if day:
+                n.set('day', day)
             e.replace(d, n)
         else:
             preceding = e.xpath('title|seriesInfo|author')
@@ -461,7 +484,7 @@ class PrepToolWriter:
             month = date.strftime('%m')
             day   = date.strftime('%d')
             e.insert(pos, self.element('date', year=year, month=month, day=day))
-        self.date = datetime.date(year=int(year), month=int(month), day=int(day))
+        self.date = datetime.date(year=int(year), month=int(month), day=int(day or '01'))
 
     # 5.2.4.  "prepTime" Insertion
     # 
@@ -508,7 +531,12 @@ class PrepToolWriter:
             for k in defaults:
                 if not k in e.attrib:
                     #debug.say('Setting <%s %s="%s">' % (e.tag, k, defaults[k]))
-                    e.set(k, defaults[k])
+                    if ':' in k:
+                        ns, tag = k.split(':',1)
+                        q = etree.QName(namespaces[ns], tag)
+                        e.set(q, defaults[k])
+                    else:
+                        e.set(k, defaults[k])
 
     # 5.2.7.  Section "toc" attribute
     # 
@@ -643,7 +671,7 @@ class PrepToolWriter:
     def attribute_title(self, e, p):
         title = e.get('title')
         del e.attrib['title']
-        name = self.element('name')
+        name = self.element('name', line=e.sourceline)
         name.text = title
         e.insert(0, name)
 
@@ -916,14 +944,14 @@ class PrepToolWriter:
     #       pn='p-[section]-[counter]'
     def boilerplate_section_add_number(self, e, p):
         self.boilerplate_section_number += 1
-        e.set('pn', 'section-boilerplate.%s' % (self.boilerplate_section_number, ))
+        e.set('pn', '%s-boilerplate.%s' % (pnprefix[e.tag], self.boilerplate_section_number, ))
 
     def front_abstract_add_number(self, e, p):
-        e.set('pn', 'section-abstract')
+        e.set('pn', '%s-abstract' % pnprefix[e.tag])
 
     def front_note_add_number(self, e, p):
         self.note_number += 1
-        e.set('pn', 'section-note.%s' % (self.note_number, ))
+        e.set('pn', '%s-note.%s' % (pnprefix[e.tag], self.note_number, ))
 
     def middle_section_add_number(self, e, p):
         level = len(list(e.iterancestors('section')))
@@ -932,16 +960,16 @@ class PrepToolWriter:
         self.middle_section_number[level] += 1
         if level < self.prev_section_level:
             self.middle_section_number = self.middle_section_number[:level+1]
-        e.set('pn', 'section-%s' % ('.'.join([ str(n) for n in self.middle_section_number ]), ))
+        e.set('pn', '%s-%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in self.middle_section_number ]), ))
         self.prev_section_level = level
 
     def table_add_number(self, e, p):
         self.table_number += 1
-        e.set('pn', 'table-%s' % (self.table_number, ))
+        e.set('pn', '%s-%s' % (pnprefix[e.tag], self.table_number, ))
 
     def figure_add_number(self, e, p):
         self.figure_number += 1
-        e.set('pn', 'figure-%s' % (self.figure_number, ))
+        e.set('pn', '%s-%s' % (pnprefix[e.tag], self.figure_number, ))
 
     def references_add_number(self, e, p):
         self.references_number[0] = self.middle_section_number[0] + 1
@@ -949,7 +977,7 @@ class PrepToolWriter:
             if len(self.references_number) == 1:
                 self.references_number.append(0)
             self.references_number[1] += 1
-        e.set('pn', 'section-%s' % ('.'.join([ str(s) for s in self.references_number ]), ))
+        e.set('pn', '%s-%s' % (pnprefix[e.tag], '.'.join([ str(s) for s in self.references_number ]), ))
 
     def back_section_add_number(self, e, p):
         level = len(list(e.iterancestors('section')))
@@ -960,7 +988,7 @@ class PrepToolWriter:
             self.back_section_number = self.back_section_number[:level+1]
         section_number = self.back_section_number[:]
         section_number[0] = chr(0x60+section_number[0])
-        e.set('pn', 'appendix-%s' % ('.'.join([ str(n) for n in section_number ]), ))
+        e.set('pn', '%s-%s' % (pnprefix['back/section'], '.'.join([ str(n) for n in section_number ]), ))
         self.prev_section_level = level
 
     def paragraph_add_number(self, e, p):
@@ -1008,10 +1036,11 @@ class PrepToolWriter:
             self.err(e, "Expected <iref> to have an item= attribute, but found none")
         else:
             if sub:
-                e.set('pn', slugify_name('iref-%s-%s-%s' % (item, sub, self.iref_number)))
+                pn = slugify_name('%s-%s-%s-%s' % (pnprefix[e.tag], item, sub, self.iref_number))
             else:
-                e.set('pn', slugify_name('iref-%s-%s' % (item, self.iref_number)))
-
+                pn = slugify_name('%s-%s-%s' % (pnprefix[e.tag], item, self.iref_number))
+            e.set('pn', pn)
+            self.index_entries.append(index_item(item, sub, p.get('pn'), None))
 
     # 5.4.8.  <xref> Processing
     # 
@@ -1057,27 +1086,26 @@ class PrepToolWriter:
     #       of the "target" attribute with no other adornment.  Issue a
     #       warning if the "derivedContent" attribute already exists and has a
     #       different value from what was being filled in.
-    def element_xref(self, e, p):
+    def build_derived_content(self, e, p):
         def split_pn(t, pn):
             if pn is None:
                 self.die(e, "Expected to find a pn= attribute on <%s anchor='%s'> when processing <xref>, but found none" % (t.tag, t.get('anchor')), trace=True)
             type, num = pn.split('-')[:2]
             return type, num
         #
+        target = e.get('target')
+        if not target:
+            self.die(e, "Expected <xref> to have a target= attribute, but found none")
+        t = self.root.find('.//*[@anchor="%s"]'%(target, ))
+        if t is None:
+            self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
+        #
         if e.text:
-            value = e.text.strip()
+            content = e.text.strip()
         else:
-            target = e.get('target')
-            if not target:
-                self.die(e, "Expected <xref> to have a target= attribute, but found none")
-            format = e.get('format')
-            if not format:
-                self.die(e, "<xref> format= value should have been filled in with its default!", trace=True)
-            t = self.root.find('.//*[@anchor="%s"]'%(target, ))
-            if t is None:
-                self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
             pn = t.get('pn')
             #
+            format = e.get('format', 'default')
             if   format == 'counter':
                 if not t.tag in ['section', 'table', 'figure', 'li']:
                     self.die(e, "Using <xref> format='counter' with a <%s> target is not supported" % (t.tag, ))
@@ -1086,36 +1114,39 @@ class PrepToolWriter:
                     if not parent.tag == 'ol':
                         self.die(e, "Using <xref> format='counter' with a <%s><%s> target is not supported" %(parent.tag, t.tag, ))
                 type, num = split_pn(t, pn)
-                value = num
+                content = num
             elif format == 'default':
                 if t.tag in [ 'reference', 'referencegroup' ]:
-                    value = refname_mapping[t.get('anchor')]
+                    content = '[%s]' % refname_mapping[t.get('anchor')]
                 else:
                     type, num = split_pn(t, pn)
-                    value = e.text if e.text else "%s %s" % (type.capitalize(), num)
+                    content = "%s %s" % (type.capitalize(), num)
             elif format == 'title':
                 if t.tag == 'reference':
                     title = t.find('./front/title')
                     if title is None:
                         self.err(t, "Expected a <title> element when processing <xref> to <%s>, but found none" % (t.tag, ))
-                    value = title.text
+                    content = title.text
                 elif t.find('./name') != None:
                     name = t.find('./name')
-                    value = ' '.join(list(name.itertext()))
+                    content = ' '.join(list(name.itertext()))
                 else:
-                    value = target
+                    content = target
             elif format == 'none':
-                value = ''
+                content = ''
             else:
                 self.err(e, "Expected format to be one of 'default', 'title', 'counter' or 'none', but found '%s'" % (format, ) )
-        #
-        attr = e.get('derivedContent')
-        if attr and attr != value:
-            self.err(e, "When processing <xref>, found derivedContent='%s' when trying to set it to '%s'" % (attr, value))
-        e.set('derivedContent', value)
-        # relative= processing
+        return t, content
+
+    def element_xref(self, e, p):
         if e.get('relative') or e.get('section'):
-            self.element_relref(e, p, t)
+            self.element_relref(e, p)
+        else:
+            t, content = self.build_derived_content(e, p)
+            attr = e.get('derivedContent')
+            if attr and attr != content:
+                self.err(e, "When processing <xref>, found derivedContent='%s' when trying to set it to '%s'" % (attr, content))
+            e.set('derivedContent', content)
 
     # 5.4.9.  <relref> Processing
     # 
@@ -1124,9 +1155,9 @@ class PrepToolWriter:
     # 
     #    For each <relref> element, fill in the "derivedLink" attribute.
     def element_relref(self, e, p, t=None):
-        if t is None:
-            target = e.get('target')
-            t = self.root.find('.//*[@anchor="%s"]'%(target, ))
+        t, content = self.build_derived_content(e, p)
+        #
+        label = 'Section'
         section = e.get('section')
         if section is None:
             self.err("Cannot render an <%s> with a relative= attribute without also having a section= attribute." % (e.tag))
@@ -1143,9 +1174,27 @@ class PrepToolWriter:
         if relative:
             url = t.get('target')
             if url is None:
-                self.err(e, "Cannot build a href for <reference anchor='%s'> without having a target= attribute giving the URL." % (target, ))
+                self.err(e, "Cannot build a href for <reference anchor='%s'> without having a target= attribute giving the URL." % (t.get('anchor'), ))
             link = "%s#%s" % (url, relative)
             e.set('derivedLink', link)
+            if '-' in relative:
+                l, __ = relative.split('-', 1)
+                if l in pnprefix.values():
+                    label = l.capitalize()
+        if e.text:
+            content = e.text.strip()
+        else:
+            part_format = e.get('sectionFormat', e.get('displayFormat', 'of'))
+            values = dict(label=label, section=section, target=content)
+            if   part_format == 'of':
+                content = '{label} {section} of {target}'.format(**values)
+            elif part_format == 'comma':
+                content = '{target}, Section {section}'.format(**values)
+            elif part_format == 'parens':
+                content = '{target} (Section {section})'.format(**values)
+            elif part_format == 'bare':
+                content = '{section}'.format(**values)
+        e.set('derivedContent', content)
 
     # 5.5.  Inclusion
     # 
@@ -1265,8 +1314,9 @@ class PrepToolWriter:
                     alt = e.get('alt')
                     if alt and svg != None:
                         if not svg.xpath('.//desc'):
-                            desc = self.element('desc')
+                            desc = self.element('desc', line=e.sourceline)
                             desc.text = alt
+                            desc.sourceline = e.sourceline
                             svg.append(desc)
 
     #    5.  If an <artwork> element has type='binary-art', the data needs to
@@ -1370,6 +1420,74 @@ class PrepToolWriter:
                 e.text = data
                 del e.attrib['src']
 
+    #
+    def back_insert_index(self, e, p):
+        def letter_li(letter, letter_entries):
+            li = self.element('li')
+            t = self.element('t')
+            i = 'rfc.index.%s' % letter
+            t.append(self.element('xref', anchor=i, target=i, format='counter'))
+            li.append(t)
+            #
+            ul = self.element('ul')
+            li.append(ul)
+            items = [ i.item for i in letter_entries ]
+            for item in items:
+                item_entries = [ i for i in letter_entries if i.item==item ]
+                ul.append(item_li(item, item_entries))
+            return li
+        def item_li(item, item_entries):
+            li = self.element('li')
+            t = self.element('t')
+            t.text = item
+            li.append(t)
+            t = self.element('t')
+            li.append(t)
+            for i in item_entries:
+                t.append(self.element('xref', target=i.anchor, format='counter'))
+            subs = [ i.sub for i in item_entries if i.sub ]
+            if subs:
+                ul = self.element('ul')
+                li.append(ul)
+                for sub in subs:
+                    sub_entries = [ i for i in item_entries if i.sub==sub ]
+                    ul.append(sub_li(item, sub, sub_entries))
+            return li
+        def sub_li(item, sub, sub_entries):
+            li = self.element('li')
+            t = self.element('t')
+            t.text = sub
+            li.append(t)
+            t = self.element('t')
+            for i in sub_entries:
+                t.append(self.element('xref', target=i.anchor, format='counter'))
+            return li
+        if self.index_entries and self.root.get('includeIndex') == 'true':
+            index = self.element('section', numbered='false')
+            name = self.element('name')
+            name.text = 'Index'
+            index.append(name)
+            #
+            index_index = self.element('t', anchor='rfc.index.index')
+            index.append(index_index)
+            # give the index a part number
+            self.back_section_add_number(index, e)
+            # sort the index entries
+            self.index_entries.sort(key=lambda i: '%s~%s' % (i.item, i.sub or ''))
+            # get the first letters
+            letters = [ i.item[0].upper() for i in self.index_entries ]
+            # set up the index index
+            for letter in letters:
+                index_index.append(self.element('xref', target='rfc.index.%s'%letter))
+            # one letter entry per letter
+            index_ul = self.element('ul')
+            index.append(index_ul)
+            for letter in letters:
+                letter_entries = [ i for i in self.index_entries if i.item.upper().startswith(letter) ]
+                index_ul.append(letter_li(letter, letter_entries))
+            #
+            e.append(index)
+
     # 5.6.  RFC Production Mode Cleanup
     # 
     #    These steps provide extra cleanup of the output document in RFC
@@ -1450,7 +1568,7 @@ class PrepToolWriter:
     #    attributes from all elements.
     def attribute_removal(self, e, p):
         if self.options.rfc:
-            for c in e.iterfind('.//*[@xml:base]', namespaces={'xml':'http://www.w3.org/XML/1998/namespace', }):
+            for c in e.iterfind('.//*[@xml:base]', namespaces=namespaces):
                 del c.attrib['{http://www.w3.org/XML/1998/namespace}base']
             for c in e.iterfind('.//*[@originalSrc]'):
                 del c.attrib['originalSrc']
