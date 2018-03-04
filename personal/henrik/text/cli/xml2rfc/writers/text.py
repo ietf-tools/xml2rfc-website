@@ -3028,7 +3028,7 @@ class TextWriter:
     def render_xref(self, e):
         text = e.get('derivedContent')
         if text is None:
-            self.die(e, "Found an <xref> without derivedContent")
+            self.die(e, "Found an <xref> without derivedContent: %s" % (etree.tostring(e),))
         if e.tail:
             text += e.tail
         return text
