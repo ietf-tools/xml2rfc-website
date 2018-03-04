@@ -493,6 +493,7 @@
        attribute target { xsd:IDREF },
        [ a:defaultValue = "of" ]
        attribute displayFormat { "of" | "comma" | "parens" | "bare" }?,
+       attribute derivedContent { text }?,
        attribute section { text },
        attribute relative { text }?,
        attribute derivedLink { text }?,
