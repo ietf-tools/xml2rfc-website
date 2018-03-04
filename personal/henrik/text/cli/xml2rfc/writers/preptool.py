@@ -123,8 +123,11 @@ class PrepToolWriter:
         self.prev_paragraph_section = None
         #
         self.liberal = liberal if liberal != None else options.liberal
+        self.prepped = self.root.get('prepTime')
         #
         self.index_entries = []
+        #
+        self.spacer = '  '
 
     def get_attribute_names(self, tag):
         attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=namespaces)
@@ -133,7 +136,7 @@ class PrepToolWriter:
         
     def get_attribute_defaults(self, tag):
         if not tag in self.attribute_defaults:
-            ignored_attributes = set(['keepWithNext', 'keepWithPrevious', 'toc', 'pageno', 'displayFormat', ])
+            ignored_attributes = set(['keepWithNext', 'keepWithPrevious', 'toc', 'pageno', 'displayFormat', 'sectionFormat', ])
             attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=namespaces)
             defaults = dict( (a.get('name'), a.get("{%s}defaultValue"%namespaces['a'], None)) for a in attr )
             keys = list( set(defaults.keys()) - ignored_attributes)
@@ -256,12 +259,14 @@ class PrepToolWriter:
             './/figure;add_number()',
             './/references;add_number()',
             './/back//section;add_number()',
-            '.;paragraph_add_number()',
+            '.;paragraph_add_numbers()',
             './/iref;add_number()',             # 5.4.7.  <iref> Numbering
             './/xref',                          # 5.4.8.  <xref> Processing
             './/relref',                        # 5.4.9.  <relref> Processing
             './/artwork',                       # 5.5.1.  <artwork> Processing
             './/sourcecode',                    # 5.5.2.  <sourcecode> Processing
+            #
+            './/boilerplate;insert_table_of_contents()',
             './back;insert_index()',
             './/*[@removeInRFC="true"]',        # 5.6.1.  <note> Removal
             './/cref;removal()',                # 5.6.2.  <cref> Removal
@@ -365,13 +370,14 @@ class PrepToolWriter:
     ## modified to use "section-", "figure-", "table-", "index-"
 
     def attribute_anchor(self, e, p):
-        reserved = set([ '%s-'%v for v in pnprefix.values() ])
-        k = 'anchor'
-        if k in e.keys():
-            v = e.get(k)
-            for prefix in reserved:
-                if v.startswith(prefix):
-                    self.err(e, "Reserved anchor name: %s.  Don't use anchor names beginning with one of %s" % (v, ', '.join(reserved)))
+        if not self.prepped:
+            reserved = set([ '%s-'%v for v in pnprefix.values() ])
+            k = 'anchor'
+            if k in e.keys():
+                v = e.get(k)
+                for prefix in reserved:
+                    if v.startswith(prefix):
+                        self.err(e, "Reserved anchor name: %s.  Don't use anchor names beginning with one of %s" % (v, ', '.join(reserved)))
 
     # 
     # 5.2.  Defaults
@@ -724,18 +730,17 @@ class PrepToolWriter:
     #    remove the existing children.
     # 
     def front_insert_boilerplate(self, e, p):
-        if self.options.rfc:
-            old_bp = e.find('boilerplate')
-            new_bp = self.element('boilerplate')
-            if old_bp != None:
-                if not self.liberal:
-                    children = old_bp.getchildren()
-                    if len(children):
-                        self.warn(old_bp, "Expected no <boilerplate> element, but found one.  Replacing the content with new boilerplate")
-                    new_bp = self.element('boilerplate')
-                    e.replace(old_bp, new_bp)
-            else:
-                e.append(new_bp)
+        old_bp = e.find('boilerplate')
+        new_bp = self.element('boilerplate')
+        if old_bp != None:
+            if not self.liberal:
+                children = old_bp.getchildren()
+                if len(children):
+                    self.warn(old_bp, "Expected no <boilerplate> element, but found one.  Replacing the content with new boilerplate")
+                new_bp = self.element('boilerplate')
+                e.replace(old_bp, new_bp)
+        else:
+            e.append(new_bp)
 
     # 5.4.2.1.  Compare <rfc> "submissionType" and <seriesInfo> "stream"
     # 
@@ -766,6 +771,8 @@ class PrepToolWriter:
     #    element, to determine which boilerplate from [RFC7841] to include, as
     #    described in Appendix A of [RFC7991].
     def boilerplate_insert_status_of_memo(self, e, p):
+        if self.prepped:
+            return
         # submissionType: "IETF" | "IAB" | "IRTF" | "independent"
         # consensus: "false" | "true"
         # category: "std" | "bcp" | "exp" | "info" | "historic"
@@ -788,7 +795,7 @@ class PrepToolWriter:
                 elif stream == 'independent':
                     consensus = 'n/a'
                 #
-                section = self.element('section', numbered='false')
+                section = self.element('section', numbered='false', toc='exclude')
                 name = self.element('name')
                 name.text = "Status of this Memo"
                 section.append(name)
@@ -814,6 +821,8 @@ class PrepToolWriter:
     #    which version of the Trust Legal Provisions (TLP) to use, as
     #    described in A.1 of [RFC7991].
     def boilerplate_insert_copyright_notice(self, e, p):
+        if self.prepped:
+            return
         if self.options.rfc:
             if self.liberal and e.xpath('./section/name[text()="Copyright Notice"]'):
                 self.note(e, "Boilerplate 'Copyright Notice' section exists, leaving it in place")
@@ -839,7 +848,7 @@ class PrepToolWriter:
                 else:
                     tlp = "4.0"
                     stream = 'IETF' if subtype == 'IETF' else 'alt'
-                section = self.element('section', numbered='false')
+                section = self.element('section', numbered='false', toc='exclude')
                 name = self.element('name')
                 name.text = "Copyright Notice"
                 section.append(name)
@@ -856,6 +865,7 @@ class PrepToolWriter:
                     section.append(t)
                 e.append(section)
         
+
     # 5.2.7.  Section "toc" attribute
     # 
     #    ...
@@ -991,7 +1001,7 @@ class PrepToolWriter:
         e.set('pn', '%s-%s' % (pnprefix['back/section'], '.'.join([ str(n) for n in section_number ]), ))
         self.prev_section_level = level
 
-    def paragraph_add_number(self, e, p):
+    def paragraph_add_numbers(self, e, p):
         # In this case, we need to keep track of separate paragraph number
         # sequences as we descend to child levels and return.  Handle this by
         # recursive descent.
@@ -1098,7 +1108,9 @@ class PrepToolWriter:
             self.die(e, "Expected <xref> to have a target= attribute, but found none")
         t = self.root.find('.//*[@anchor="%s"]'%(target, ))
         if t is None:
-            self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
+            t = self.root.find('.//*[@pn="%s"]'%(target, ))
+            if t is None:
+                self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
         #
         if e.text:
             content = e.text.strip()
@@ -1204,7 +1216,6 @@ class PrepToolWriter:
     # 
     def check_src_scheme(self, e, src):
         permitted_schemes = ['file', 'http', 'https', 'data', ]
-        e.set('originalSrc', src)
         scheme, netloc, path, query, fragment = urlsplit(src)
         if scheme == '':
             scheme = 'file'
@@ -1239,9 +1250,10 @@ class PrepToolWriter:
     #        "file:" scheme in a path relative to the file being processed.
     #        See Section 7 for warnings about this step.  This will likely be
     #        one of the most common authoring approaches.
-            
+
         src = e.get('src','').strip()
         if src:
+            original_src = src
             scheme, netloc, path, query, fragment = self.check_src_scheme(e, src)
 
     #    2.  If an <artwork> element has a "src" attribute with a "file:"
@@ -1256,6 +1268,9 @@ class PrepToolWriter:
     #        issues.  See Section 7 for warnings about this step.
             if scheme == 'file':
                 src = self.check_src_file_path(e, scheme, netloc, path, query, fragment)
+
+            if src != original_src:
+                e.set('originalSrc', original_src)
 
     #    3.  If an <artwork> element has a "src" attribute, and the element
     #        has content, give an error.
@@ -1379,6 +1394,7 @@ class PrepToolWriter:
     #        one of the most common authoring approaches.
         src = e.get('src','').strip()
         if src:
+            original_src = src
             scheme, netloc, path, query, fragment = self.check_src_scheme(e, src)
 
 
@@ -1394,6 +1410,8 @@ class PrepToolWriter:
     #        security issues.  See Section 7 for warnings about this step.
             if scheme == 'file':
                 src = self.check_src_file_path(e, scheme, netloc, path, query, fragment)
+                if src != original_src:
+                    e.set('originalSrc', original_src)
 
     #    3.  If a <sourcecode> element has a "src" attribute, and the element
     #        has content, give an error.
@@ -1421,12 +1439,85 @@ class PrepToolWriter:
                 del e.attrib['src']
 
     #
-    def back_insert_index(self, e, p):
-        def letter_li(letter, letter_entries):
-            li = self.element('li')
+    # 5.4.2.4  "Table of Contents" Insertion
+    # 5.4.2.4  "Table of Contents" Insertion
+    def boilerplate_insert_table_of_contents(self, e, p):
+        if self.prepped:
+            return
+        def toc_entry_t(s):
+            name = s.find('./name')
+            if name is None:
+                self.die(s, "No name entry found for section, can't continue: %s" % (etree.tostring(s)))
+            title = ' '.join(list(name.itertext()))
+            num = s.get('pn').split('-')[1]
+            #
             t = self.element('t')
+            anchor = s.get('anchor')
+            if not anchor:
+                anchor = s.get('pn')
+                if not anchor:
+                    self.die(s, "No anchor and no pn entry found for section, can't continue: %s" % (etree.tostring(s)))
+                s.set('anchor', anchor)
+            xref = self.element('xref', target=anchor, format='counter', derivedContent=num)
+            xref.tail = '.'+self.spacer
+            t.append(xref)
+            if name.text:
+                xref.tail += ' '+name.text
+            for c in name:
+                cc = copy.deepcopy(c)
+                if 'anchor' in cc.keys():
+                    cc.set('anchor', slugify('toc-'+cc.get('anchor')))
+                t.append(cc)
+            t.tail = name.tail
+            return t
+        def toc_entries(e):
+            toc = e.get('toc')
+            if toc == 'include' or e.tag in ['rfc', 'front', 'middle', 'back']:
+                sub = []
+                for c in e:
+                    l = toc_entries(c)
+                    if l:
+                        sub += l
+                if e.tag == 'section':
+                    li = self.element('li')
+                    li.append(toc_entry_t(e))
+                    if sub:
+                        ul = self.element('ul')
+                        for s in sub:
+                            ul.append(s)
+                        li.append(ul)
+                    return [ li ]
+                else:
+                    return sub
+            return []
+        if self.root.get('tocInclude') == 'true':
+            max_depth = self.root.get('tocDepth') # has been set to default earler if not initially set
+            prev_depth = 0
+            toc = self.element('section', numbered='false', toc='exclude')
+            name = self.element('name')
+            name.text = "Table of Contents"
+            toc.append(name)
+            self.name_insert_slugified_name(name, toc)
+            ul = self.element('ul')
+            toc.append(ul)
+            for s in toc_entries(self.root):
+                ul.append(s)
+            e.append(toc)
+            #
+            self.boilerplate_section_add_number(toc, e)
+            self.paragraph_add_numbers(toc, e)
+
+    #
+    def back_insert_index(self, e, p):
+        if self.prepped:
+            return
+        def letter_li(letter, letter_entries):
             i = 'rfc.index.%s' % letter
-            t.append(self.element('xref', anchor=i, target=i, format='counter'))
+            li = self.element('li', anchor=i)
+            t = self.element('t', anchor=i)
+            xref = self.element('xref', target=i, format='default', derivedContent=letter)
+            xref.text = letter
+            t.append(xref)
             li.append(t)
             #
             ul = self.element('ul')
@@ -1444,7 +1535,9 @@ class PrepToolWriter:
             t = self.element('t')
             li.append(t)
             for i in item_entries:
-                t.append(self.element('xref', target=i.anchor, format='counter'))
+                xref = self.element('xref', target=i.anchor, format='default', derivedContent=i.item)
+                xref.text = i.item
+                t.append(xref)
             subs = [ i.sub for i in item_entries if i.sub ]
             if subs:
                 ul = self.element('ul')
@@ -1460,25 +1553,26 @@ class PrepToolWriter:
             li.append(t)
             t = self.element('t')
             for i in sub_entries:
-                t.append(self.element('xref', target=i.anchor, format='counter'))
+                t.append(self.element('xref', target=i.anchor, format='counter', derivedContent=i.sub))
             return li
-        if self.index_entries and self.root.get('includeIndex') == 'true':
-            index = self.element('section', numbered='false')
+        if self.index_entries and self.root.get('indexInclude') == 'true':
+            index = self.element('section', numbered='false', toc='exclude')
             name = self.element('name')
             name.text = 'Index'
             index.append(name)
+            self.name_insert_slugified_name(name, index)
             #
             index_index = self.element('t', anchor='rfc.index.index')
             index.append(index_index)
-            # give the index a part number
-            self.back_section_add_number(index, e)
             # sort the index entries
             self.index_entries.sort(key=lambda i: '%s~%s' % (i.item, i.sub or ''))
             # get the first letters
             letters = [ i.item[0].upper() for i in self.index_entries ]
             # set up the index index
             for letter in letters:
-                index_index.append(self.element('xref', target='rfc.index.%s'%letter))
+                xref = self.element('xref', target='rfc.index.%s'%letter, derivedContent=letter)
+                xref.text = letter
+                index_index.append(xref)
             # one letter entry per letter
             index_ul = self.element('ul')
             index.append(index_ul)
@@ -1487,6 +1581,9 @@ class PrepToolWriter:
                 index_ul.append(letter_li(letter, letter_entries))
             #
             e.append(index)
+            #
+            self.back_section_add_number(index, e)
+            self.paragraph_add_numbers(index, e)
 
     # 5.6.  RFC Production Mode Cleanup
     # 
