@@ -1098,7 +1098,7 @@
         <attribute name="derivedContent"/>
       </optional>
       <optional>
-        <attribute name="displayFormat" a:defaultValue="of">
+        <attribute name="sectionFormat" a:defaultValue="of">
           <choice>
             <value>of</value>
             <value>comma</value>
@@ -1139,6 +1139,9 @@
             <value>bare</value>
           </choice>
         </attribute>
+      </optional>
+      <optional>
+        <attribute name="derivedContent"/>
       </optional>
       <attribute name="section"/>
       <optional>
