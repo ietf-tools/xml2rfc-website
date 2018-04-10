@@ -33,21 +33,14 @@ from lxml import etree
 from xml2rfc import log
 from xml2rfc.boilerplate_rfc_7841 import boilerplate_status_of_memo
 from xml2rfc.boilerplate_tlp import boilerplate_tlp
-from xml2rfc.utils import build_dataurl
+from xml2rfc.utils import build_dataurl, namespaces, find_duplicate_ids
 from xml2rfc.writers.base import default_options
 from xml2rfc.writers.v2v3 import slugify
 from xml2rfc.scripts import get_scripts
 
-namespaces={
-    'x':    'http://relaxng.org/ns/structure/1.0',
-    'a':    'http://relaxng.org/ns/compatibility/annotations/1.0',
-    'xml':  'http://www.w3.org/XML/1998/namespace',
-}
-
 pnprefix = {
     # tag: prefix
     'abstract':     'section',
-    'back/section': 'appendix',
     'boilerplate':  'section',
     'figure':       'figure',
     'iref':         'iref',
@@ -60,6 +53,15 @@ pnprefix = {
 refname_mapping = {}
 
 index_item = namedtuple('index_item', ['item', 'sub', 'anchor', 'page', ])
+
+def uniq(l):
+    seen = set()
+    ll = []
+    for i in l:
+        if not i in seen:
+            seen.add(i)
+            ll.append(i)
+    return ll
 
 def normalize_month(month):
     months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -154,17 +156,17 @@ class PrepToolWriter:
 
     def note(self, e, text):
         lnum = getattr(e, 'sourceline', 0)
-        msg = "%s(%s): Note: %s" % (self.xmlrfc.source, lnum+1, text)
+        msg = "%s(%s): Note: %s" % (self.xmlrfc.source, lnum, text)
         log.write(msg)
 
     def warn(self, e, text):
         lnum = getattr(e, 'sourceline', 0)
-        msg = "%s(%s): Warning: %s" % (self.xmlrfc.source, lnum+1, text)
+        msg = "%s(%s): Warning: %s" % (self.xmlrfc.source, lnum, text)
         log.write(msg)
 
     def err(self, e, text, trace=False):
         lnum = getattr(e, 'sourceline', 0)
-        msg = "%s(%s): Error: %s" % (self.xmlrfc.source, lnum+1, text)
+        msg = "%s(%s): Error: %s" % (self.xmlrfc.source, lnum, text)
         if trace or self.options.debug:
             raise RuntimeError(msg)
         else:
@@ -177,12 +179,24 @@ class PrepToolWriter:
         sys.exit(1)
 
     def validate(self, when):
+        # Note: Our schema doesn't permit xi:include elements, so the documnet
+        # must have expanded those before validation.
 
-        
+
+        # The lxml Relax NG validator checks that xsd:ID values are unique,
+        # but unfortunately the error messages are completely unhelpful (lxml
+        # 4.1.1, libxml 2.9.1): "Element li has extra content: t" when 't' has
+        # a duplicate xsd:ID attribute.  So we check all attributes with
+        # content specified as xsd:ID first, and give better messages:
+
+        # Get the attributes we need to check
+        dups = find_duplicate_ids(self.schema, self.tree)
+        for attr, id, e in dups:
+            self.warn(e, 'Duplicate xsd:ID attribute %s="%s" found.  This will cause validation failure.' % (attr, id, ))
+
+
         v3_rng = etree.RelaxNG(file=self.v3_rng_file)
 
-        # Our schema doesn't permit xi:include elements, so we must expand
-        # before validation
         try:
             v3_rng.assertValid(self.tree)
             log.note("The document validates according to the RFC7991 schema %s running preptool" % (when, ))
@@ -568,8 +582,7 @@ class PrepToolWriter:
         etoc = e.get('toc')
         ptoc = p.get('toc')
         included_descendants = e.xpath('.//section[@toc="include"]')
-        edepth = len([ a for a in e.iterancestors() if a.tag == 'section'])+1
-
+        edepth = len([ a for a in e.iterancestors('section') ])+1
         if   etoc == 'include':
             pass
         elif etoc in [ None, 'default' ]:
@@ -998,7 +1011,10 @@ class PrepToolWriter:
             self.back_section_number = self.back_section_number[:level+1]
         section_number = self.back_section_number[:]
         section_number[0] = chr(0x60+section_number[0])
-        e.set('pn', '%s-%s' % (pnprefix['back/section'], '.'.join([ str(n) for n in section_number ]), ))
+        if level == 0:
+            e.set('pn', '%s-appendix-%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in section_number ]), ))
+        else:
+            e.set('pn', '%s-%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in section_number ]), ))
         self.prev_section_level = level
 
     def paragraph_add_numbers(self, e, p):
@@ -1050,7 +1066,11 @@ class PrepToolWriter:
             else:
                 pn = slugify_name('%s-%s-%s' % (pnprefix[e.tag], item, self.iref_number))
             e.set('pn', pn)
-            self.index_entries.append(index_item(item, sub, p.get('pn'), None))
+            anchor = p.get('anchor')
+            if not anchor:
+                anchor = p.get('pn')
+                p.set('anchor', anchor)
+            self.index_entries.append(index_item(item, sub, anchor, None))
 
     # 5.4.8.  <xref> Processing
     # 
@@ -1111,6 +1131,7 @@ class PrepToolWriter:
             t = self.root.find('.//*[@pn="%s"]'%(target, ))
             if t is None:
                 self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
+            t.set('anchor', t.get('pn'))
         #
         if e.text:
             content = e.text.strip()
@@ -1449,7 +1470,7 @@ class PrepToolWriter:
             if name is None:
                 self.die(s, "No name entry found for section, can't continue: %s" % (etree.tostring(s)))
             title = ' '.join(list(name.itertext()))
-            num = s.get('pn').split('-')[1]
+            num = s.get('pn').split('-', 1)[1].replace('-', ' ').title()
             #
             t = self.element('t')
             anchor = s.get('anchor')
@@ -1482,7 +1503,7 @@ class PrepToolWriter:
                     li = self.element('li')
                     li.append(toc_entry_t(e))
                     if sub:
-                        ul = self.element('ul')
+                        ul = self.element('ul', empty='true', spacing='compact')
                         for s in sub:
                             ul.append(s)
                         li.append(ul)
@@ -1498,7 +1519,7 @@ class PrepToolWriter:
             name.text = "Table of Contents"
             toc.append(name)
             self.name_insert_slugified_name(name, toc)
-            ul = self.element('ul')
+            ul = self.element('ul', empty='true', spacing='compact')
             toc.append(ul)
             for s in toc_entries(self.root):
                 ul.append(s)
@@ -1513,7 +1534,7 @@ class PrepToolWriter:
             return
         def letter_li(letter, letter_entries):
             i = 'rfc.index.%s' % letter
-            li = self.element('li', anchor=i)
+            li = self.element('li')
             t = self.element('t', anchor=i)
             xref = self.element('xref', target=i, format='default', derivedContent=letter)
             xref.text = letter
@@ -1567,7 +1588,7 @@ class PrepToolWriter:
             # sort the index entries
             self.index_entries.sort(key=lambda i: '%s~%s' % (i.item, i.sub or ''))
             # get the first letters
-            letters = [ i.item[0].upper() for i in self.index_entries ]
+            letters = uniq([ i.item[0].upper() for i in self.index_entries ])
             # set up the index index
             for letter in letters:
                 xref = self.element('xref', target='rfc.index.%s'%letter, derivedContent=letter)
