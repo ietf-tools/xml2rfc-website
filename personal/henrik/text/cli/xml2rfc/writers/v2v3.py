@@ -7,10 +7,14 @@ import re
 import lxml.etree
 import datetime
 import traceback as tb
+
 from io import open
-from xml2rfc import log
-from xml2rfc.writers.base import default_options
 from lxml.etree import Element, Comment, CDATA, _Comment
+
+from xml2rfc import log
+from xml2rfc.utils import find_duplicate_ids
+from xml2rfc.writers.base import default_options
+
 
 try:
     import debug
@@ -73,10 +77,10 @@ class V2v3XmlWriter:
             v3_rng.assertValid(self.root)
             log.note("The document validates according to the RFC7991 schema")
         except Exception as e:
-            # These warnings are occasionally incorrect -- disable this
-            # output for now:
-            #log.warn('\nInvalid document: %s' % (e,))
-            e = e
+            dups = find_duplicate_ids(self.schema, self.tree)
+            for attr, id, e in dups:
+                self.warn(e, 'Duplicate xsd:ID attribute %s="%s" found.  This will cause validation failure.' % (attr, id, ))
+            log.warn('\nInvalid document: %s' % (e,))
 
     def add_xinclude(self):
         for e in self.root.xpath('.//back//reference'):
