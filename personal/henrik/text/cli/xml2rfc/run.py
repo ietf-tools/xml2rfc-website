@@ -131,8 +131,14 @@ def main():
     formatoptions.add_option('', '--legacy', default=True, action='store_true',
                            help='with --text: use the legacy text formatter, rather than the new one.'
                        )
+    formatoptions.add_option('', '--legacy-list-symbols', default=False, action='store_true',
+                           help='with --text: use the legacy list bullet symbols, rather than the new ones.'
+                       )
+    formatoptions.add_option('', '--list-symbols', metavar='4*CHAR',
+                           help='with --text: use the characters given as list bullet symbols.'
+                       )
     formatoptions.add_option('', '--v3', dest='legacy', action='store_false',
-                           help='with --text: use the legacy text formatter, rather than the new one.'
+                           help='with --text: use the v3 text formatter, rather than the legacy one.'
                        )
     formatoptions.add_option('', '--add-xinclude', action='store_true',
                            help='with --v2v3: replace reference elements with RFC and Internet-Draft'
@@ -199,6 +205,21 @@ def main():
     options.date = datetime.datetime.strptime(options.datestring, "%Y-%m-%d").date()
     if options.omit_headers and not options.text:
         sys.exit("You can only use --no-headers with paginated text output.")
+
+    if options.text and not options.legacy:
+        if options.legacy_list_symbols and options.list_symbols:
+            sys.exit("You cannot specify both --list-symbols and --legacy_list_symbols.")
+        if options.list_symbols:
+            options.list_symbols = tuple(list(options.list_symbols))
+        elif options.legacy_list_symbols:
+            options.list_symbols = ('o', '*', '+', '-')
+        else:
+            options.list_symbols = ('*', '-', 'o', '+')
+    else:
+        if options.legacy_list_symbols:
+            sys.exit("You can only use --legacy_list_symbols with v3 text output.")
+        if options.list_symbols:
+            sys.exit("You can only use --list_symbols with v3 text output.")
 
     # Setup warnings module
     # xml2rfc.log.warn_error = options.warn_error and True or False
