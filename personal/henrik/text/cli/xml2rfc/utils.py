@@ -578,3 +578,24 @@ def normalize_month(month):
     assert month.isdigit()
     return month
 
+namespaces={
+    'x':    'http://relaxng.org/ns/structure/1.0',
+    'a':    'http://relaxng.org/ns/compatibility/annotations/1.0',
+    'xml':  'http://www.w3.org/XML/1998/namespace',
+}
+
+def find_duplicate_ids(schema, tree):
+    dups = []
+    # get attributes specified with data type "ID"
+    id_data = schema.xpath("/x:grammar/x:define/x:element//x:attribute/x:data[@type='ID']", namespaces=namespaces)
+    attr = set([ i.getparent().get('name') for i in id_data ])
+    # Check them one by one
+    for a in attr:
+        seen = set()
+        for e in tree.xpath('.//*[@%s]' % a):
+            id = e.get(a)
+            if id != None and id in seen:
+                dups.append((a, id, e))
+            else:
+                seen.add(id)
+    return dups
