@@ -1541,7 +1541,7 @@ class PrepToolWriter:
             t.append(xref)
             li.append(t)
             #
-            ul = self.element('ul')
+            ul = self.element('ul', empty='true', spacing='compact')
             li.append(ul)
             items = [ i.item for i in letter_entries ]
             for item in items:
@@ -1561,7 +1561,7 @@ class PrepToolWriter:
                 t.append(xref)
             subs = [ i.sub for i in item_entries if i.sub ]
             if subs:
-                ul = self.element('ul')
+                ul = self.element('ul', empty='true', spacing='compact')
                 li.append(ul)
                 for sub in subs:
                     sub_entries = [ i for i in item_entries if i.sub==sub ]
@@ -1595,7 +1595,7 @@ class PrepToolWriter:
                 xref.text = letter
                 index_index.append(xref)
             # one letter entry per letter
-            index_ul = self.element('ul')
+            index_ul = self.element('ul', empty='true', spacing='compact')
             index.append(index_ul)
             for letter in letters:
                 letter_entries = [ i for i in self.index_entries if i.item.upper().startswith(letter) ]
