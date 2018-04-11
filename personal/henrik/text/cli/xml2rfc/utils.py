@@ -6,6 +6,7 @@
 
 import base64
 import calendar
+import math
 import re
 import six
 import textwrap
@@ -265,6 +266,8 @@ def int2roman(number):
         900 : "cm", 
         1000 : "m" 
     }
+    if number > 3999:
+        raise NotImplementedError("Can't handle roman numerals larger than 3999")
     result = ""
     for value, numeral in sorted(numerals.items(), reverse=True):
         while number >= value:
@@ -272,6 +275,42 @@ def int2roman(number):
             number -= value
     return result
 
+
+roman_max_widths = { 1:1,  2:2,  3:3,  4:3,  5:3,  6:3,  7:3,  8:4,  9:4,
+                10:4, 11:4, 12:4, 13:4, 14:4, 15:4, 16:4, 17:4, 18:5, 19:5,
+                20:5, 21:5, 22:5, 23:5, 24:5, 25:5, 26:5, 27:5, 28:6, 29:6, }
+
+@debug.trace
+def update_roman_max_widths(n):
+    global roman_max_widths
+    if n > 3999:
+        raise NotImplementedError("Can't handle roman numerals larger than 3999")
+    m = len(roman_max_widths)
+    wmax = 0
+    for i in range(n+32):
+        w = len(int2roman(i))
+        if w > wmax:
+            wmax = w
+        if n > m:
+            roman_max_widths[n] = wmax
+
+def num_width(type, num):
+    """
+    Return the largest width taken by the numbering of a list
+    with num items (without punctuation)
+    """
+    global roman_max_widths
+    if   type in ['a','A','c','C',]:
+        return int(math.log(num, 26))+1
+    elif type in ['1','d',]:
+        return int(math.log(num, 10))+1
+    elif type in ['i','I',]:
+        m = len(roman_max_widths)
+        if num > m:
+            update_roman_max_widths(num)
+        return roman_max_widths[num]
+    else:
+        raise ValueError("Unexpected type argument to num_width(): '%s'" % (type, ))
 
 def urlkeep(text):
     """ Insert word join XML entities on forward slashes and hyphens
