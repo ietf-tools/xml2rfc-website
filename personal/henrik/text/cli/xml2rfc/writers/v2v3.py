@@ -9,6 +9,7 @@ import datetime
 import traceback as tb
 
 from io import open
+from lxml import etree
 from lxml.etree import Element, Comment, CDATA, _Comment
 
 from xml2rfc import log
@@ -69,6 +70,8 @@ class V2v3XmlWriter:
         self.tree = xmlrfc.tree
         self.root = self.tree.getroot()
         self.options = options
+        self.v3_rng_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'v3.rng')
+        self.schema = etree.ElementTree(file=self.v3_rng_file)
 
     def validate(self):
         v3_rng_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'v3.rng')
@@ -264,6 +267,7 @@ class V2v3XmlWriter:
                                             # 2.5.4.  "height" Attribute
                                             # 2.5.8.  "width" Attribute
                                             # 2.5.9.  "xml:space" Attribute
+            './/back',
             './/figure',                    # 2.25.  <figure>
                                             # 2.25.1.  "align" Attribute
                                             # 2.25.2.  "alt" Attribute
@@ -281,6 +285,7 @@ class V2v3XmlWriter:
             './/seriesInfo',                # 2.47.  <seriesInfo>
             './/t',                         # 2.53.  <t>
                                             # 2.53.2.  "hangText" Attribute
+            './/li',
             './/xref',                      # 2.66.  <xref>
                                             # 2.66.1.  "format" Attribute
                                             # 2.66.2.  "pageno" Attribute
@@ -420,7 +425,24 @@ class V2v3XmlWriter:
             if ends and tail.strip() != "":
                 self.warn("Found non-whitespace content after <CODE ENDS>")
                 e.tail = tail
-            stripattr(e, ['align', 'alt', 'height', 'suppress-title', 'width', ])
+            stripattr(e, ['height', 'suppress-title', 'width', ])
+            if self.options.strict:
+                stripattr(e, ['align', 'alt', ])
+
+    def element_back(self, e, p):
+        # XXXX The RFCs don't say anything about the text rendering of
+        # references.  The following transforms multiple <references> in
+        # <back> to be encapsulated within one <references>.
+        references = list(e.iterchildren('references'))
+        if len(references) > 1:
+            pos = e.index(references[0])
+            refs = self.element('references')
+            name = self.element('name')
+            name.text = "References"
+            refs.append(name)
+            e.insert(pos, refs)
+            for r in references:
+                refs.append(r)          # moves r
 
 
     # 2.25.  <figure>
@@ -464,7 +486,7 @@ class V2v3XmlWriter:
         comments = []
         artwork = e.find('./artwork')
         if not artwork is None:
-            for attr in ['alt', 'src', ]:
+            for attr in ['align', 'alt', 'src', ]:
                 if attr in e.attrib:
                     fattr = e.get(attr)
                     if attr in artwork.attrib:
@@ -473,7 +495,10 @@ class V2v3XmlWriter:
                             comments.append('Warning: The "%s" attribute on artwork differs from the one on figure.  Using only "%s" on artwork.' % (attr, attr))
                     else:
                         artwork.set(attr, fattr)
-        stripattr(e, ['align', 'alt', 'height', 'src', 'suppress-title', 'width', ])
+                    stripattr(e, [ attr ])
+        stripattr(e, ['height', 'src', 'suppress-title', 'width', ])
+        if self.options.strict:
+            stripattr(e, ['align', 'alt', ])
 
     # 2.25.7.  "title" Attribute
     # 
@@ -577,6 +602,12 @@ class V2v3XmlWriter:
         if p.tag != 'list':
             stripattr(e, ['hangText', ])
             
+    def element_li(self, e, p):
+        # if the <li> content is raw inline content, wrap in t
+        if hastext(e):
+            #debug.say('Wrap %s content ...'%(p.tag))
+            self.wrap_content(e)
+
     # 
     # 
     # 2.66.  <xref>
