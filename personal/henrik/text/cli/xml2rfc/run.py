@@ -147,6 +147,9 @@ def main():
     formatoptions.add_option('', '--liberal', action='store_true',
                            help='with --preptool: accept already prepped input'
                        )
+    formatoptions.add_option('', '--strict', action='store_true',
+                           help='with --v2v3: be strict about stripping some deprecated attributes'
+                       )
 
     optionparser.add_option_group(formatoptions)
 
