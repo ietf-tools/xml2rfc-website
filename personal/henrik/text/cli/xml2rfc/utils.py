@@ -247,7 +247,7 @@ def baseX_to_num(s, digits=DEFAULT_DIGITS):
 # Use the generic base conversion to create list letters
 
 def int2letter(num):
-    return num_to_baseX(num, "abcdefghijklmnopqrstuvwxyz")
+    return num_to_baseX(num-1, "abcdefghijklmnopqrstuvwxyz")
 
 def int2roman(number):
     numerals = { 
