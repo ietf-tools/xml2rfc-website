@@ -311,7 +311,10 @@ class TextWriter:
     # 
     #    See Section 5 for a description of how to deal with issues of using
     #    "&" and "<" characters in artwork.
-
+    def render_artwork(self, e, **kwargs):
+        text = e.text or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
+        text += e.tail or ''
+        return text
 
     # 2.5.1.  "align" Attribute
     # 
@@ -488,7 +491,7 @@ class TextWriter:
     #    The author's surname, to be used in conjunction with the separately
     #    specified initials.  It usually appears on the front page, in
     #    footers, and in references.
-    def render_front_author(self, e, **kwargs):
+    def render_author_front(self, e, **kwargs):
         ascii_initials = e.get('asciiInitials', '').strip()
         if ascii_initials and not ascii_initials.endswith('.'):
             ascii_initials += '.'
@@ -842,7 +845,6 @@ class TextWriter:
     # 
     #    o  "compact"
 
-
     # 2.21.  <dt>
     # 
     #    The term being defined in a definition list.
@@ -881,7 +883,8 @@ class TextWriter:
     # 
     #    The ASCII equivalent of the author's email address.  This is only
     #    used if the email address has any internationalized components.
-    # 
+
+
     # 2.24.  <eref>
     # 
     #    Represents an "external" link (as specified in the "target"
@@ -934,7 +937,16 @@ class TextWriter:
     #    URI of the link target [RFC3986].  This must begin with a scheme name
     #    (such as "https://") and thus not be relative to the URL of the
     #    current document.
-    # 
+    def render_eref(self, e, **kwargs):
+        target = e.get('target')
+        if not target:
+            self.warn(e, "Expected the 'target' attribute to have a value, but found %s" % (etree.tostring(e), ))
+        link = "<%s>" % target if target else ''
+        text = ' '.join([ t for t in [e.text, link] if t ])
+        text += e.tail or ''
+        return text
+            
+
     # 2.25.  <figure>
     # 
     #    Contains a figure with a caption with the figure number.  If the
@@ -1063,7 +1075,6 @@ class TextWriter:
                     # handled in render_first_page_top()
                     continue
                 parts.append(self.render(c, **kwargs))
-            #debug.pprint('parts')
         return '\n\n'.join(parts)
 
     def render_first_page_top(self, e, **kwargs):
@@ -1238,7 +1249,7 @@ class TextWriter:
             prev = auth(None, None)
             authors = front.xpath('./author')
             for a in authors:
-                this = auth(*self.render_front_author(a, **kwargs))
+                this = auth(*self.render_author_front(a, **kwargs))
                 if right and this.name and this.org and this.org == prev.org:
                     right[-1] = this.name
                     right.append(this.org)
@@ -1314,7 +1325,8 @@ class TextWriter:
     # 2.27.3.  "subitem" Attribute
     # 
     #    The subitem to include.
-    # 
+
+
     # 2.28.  <keyword>
     # 
     #    Specifies a keyword applicable to the document.
@@ -1328,6 +1340,7 @@ class TextWriter:
     #    This element appears as a child element of <front> (Section 2.26).
     # 
     #    Content model: only text content.
+
 
     # 2.29.  <li>
     # 
@@ -1389,27 +1402,19 @@ class TextWriter:
     #    Document-wide unique identifier for this list item.
     def render_li(self, e, **kwargs):
         p = e.getparent()
-        text = p._setup(e, p)
+        text = p._initial_text(e, p)
         for c in e.getchildren():
             text = self.join(text, c, **kwargs)
         return text
 
-    def get_dl_setup(self, e, p):
-        text = e.text or ''
-        return text
-
-    def get_ol_setup(self, e, p):
+    def get_ol_li_initial_text(self, e, p):
         text = p._format % p._int2str(p._counter)
-        text += '  ' + e.text.lstrip() if e.text else ' '
+        text += ' '*(p._padding-len(text))
         p._counter += 1
         return text
 
-    def get_ul_setup(self, e, p):
-        if p._empty:
-            text = e.text or ''
-        else:
-            text  = p._symbol
-            text += '  ' + e.text.lstrip() if e.text else ' '
+    def get_ul_li_initial_text(self, e, p):
+        text = '' if p._empty else p._symbol + ' ' 
         return text
 
     # 2.30.  <link>
@@ -1457,7 +1462,8 @@ class TextWriter:
     #    The relationship of the external document to this one.  The
     #    relationships are taken from the "Link Relations" registry maintained
     #    by IANA [LINKRELATIONS].
-    # 
+
+
     # 2.31.  <middle>
     # 
     #    Represents the main content of the document.
@@ -1555,7 +1561,8 @@ class TextWriter:
     # 2.33.2.  "title" Attribute
     # 
     #    Deprecated.  Use <name> instead.
-    # 
+
+
     # 2.34.  <ol>
     # 
     #    An ordered list.  The labels on the items will be either a number or
@@ -1660,11 +1667,13 @@ class TextWriter:
             'i':    lambda n: tuple([utils.int2roman(n)]),
             'I':    lambda n: tuple([utils.int2roman(n).upper()]),
         }
+        #
         start = e.get('start')
         if not start.isdigit():
             self.warn(e, "Expected a numeric value for the 'start' attribute, but found %s" % (etree.tostring(e), ))
             start = '1'
         e._counter = int(start)
+        #
         type = e.get('type')
         if not type:
             self.warn(e, "Expected the 'type' attribute to have a string value, but found %s" % (etree.tostring(e), ))
@@ -1680,10 +1689,22 @@ class TextWriter:
                 fchar = None
                 e._format = type
         else:
-            fchar = type.lower()
+            fchar = type
             e._format = '%s.'
         e._int2str = int2str[fchar]
-        e._setup = self.get_ol_setup
+        e._initial_text = self.get_ol_li_initial_text
+        #
+        compact = e.get('spacing') == 'compact'
+        ljoin  = '\n' if compact else '\n\n'
+        #
+        indent = len(e._format % (' '*utils.num_width(fchar, len(list(e))))) + len('  ')
+        e._padding = indent-1
+        kwargs['joiners'].update({
+            None:   joiner('', ljoin, indent, 0),
+            't':    joiner('', ' ',   0,      indent),
+            'li':   joiner('', ljoin, 0,      0),
+        })
+        
         # rendering
         text = ""
         for c in e.getchildren():
@@ -1735,7 +1756,8 @@ class TextWriter:
     #    This element appears as a child element of <address> (Section 2.2).
     # 
     #    Content model: only text content.
-    # 
+
+
     # 2.37.  <postal>
     # 
     #    Contains optional child elements providing postal information.  These
@@ -1765,7 +1787,8 @@ class TextWriter:
     #    Or:
     # 
     #       One or more <postalLine> elements (Section 2.38)
-    # 
+
+
     # 2.38.  <postalLine>
     # 
     #    Represents one line of a postal address.  When more than one
@@ -1778,7 +1801,8 @@ class TextWriter:
     # 2.38.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the text in the address line.
-    # 
+
+
     # 2.39.  <refcontent>
     # 
     #    Text that should appear between the title and the date of a
@@ -1821,7 +1845,8 @@ class TextWriter:
     #    o  <sup> elements (Section 2.52)
     # 
     #    o  <tt> elements (Section 2.62)
-    # 
+
+
     # 2.40.  <reference>
     # 
     #    Represents a bibliographic reference.
@@ -1866,7 +1891,8 @@ class TextWriter:
     # 2.40.3.  "target" Attribute
     # 
     #    Holds the URI for the reference.
-    # 
+
+
     # 2.41.  <referencegroup>
     # 
     #    Represents a list of bibliographic references that will be
@@ -1887,7 +1913,8 @@ class TextWriter:
     #    this will be used both to "label" the reference group in the
     #    "References" section and as an identifier in links to this reference
     #    entry.
-    # 
+
+
     # 2.42.  <references>
     # 
     #    Contains a set of bibliographic references.
@@ -1920,7 +1947,21 @@ class TextWriter:
     # 2.42.2.  "title" Attribute
     # 
     #    Deprecated.  Use <name> instead.
-    # 
+    def render_references(self, e, **kwargs):
+        kwargs['joiners'].update({
+            None:           joiner('', '\n\n', 3, 0),
+            'name':         joiner('', '  ', 0, 0),
+            'references':   joiner('', '\n\n', 0, 0),
+        })
+        text = ""
+        pn = e.get('pn')
+        text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
+        for c in e.getchildren():
+            text = self.join(text, c, **kwargs)
+        return text
+        
+
+
     # 2.43.  <region>
     # 
     #    Provides the region name in a postal address.
@@ -1932,7 +1973,8 @@ class TextWriter:
     # 2.43.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the region name.
-    # 
+
+
     # 2.44.  <relref>
     # 
     #    Represents a link to a specific part of a document that appears in a
@@ -2101,7 +2143,8 @@ class TextWriter:
     #    The anchor of the reference for this element.  If this value is not
     #    an anchor to a <reference> or <referencegroup> element, it is an
     #    error.  If the reference at the target has no URI, it is an error.
-    # 
+
+
     # 2.45.  <rfc>
     # 
     #    This is the root element of the xml2rfc vocabulary.
@@ -2122,10 +2165,11 @@ class TextWriter:
         parts = []
         for c in e.getchildren():
             ctext = self.render(c, **kwargs)
-            if isinstance(ctext, list):
-                parts += ctext
-            else:
-                parts.append(ctext)
+            if ctext:
+                if isinstance(ctext, list):
+                    parts += ctext
+                else:
+                    parts.append(ctext)
         if paginated:
             text = self.page_join(parts)
         else:
@@ -2273,7 +2317,8 @@ class TextWriter:
     # 
     #    Specifies the version of xml2rfc syntax used in this document.  The
     #    only expected value (for now) is "3".
-    # 
+
+
     # 2.46.  <section>
     # 
     #    Represents a section (when inside a <middle> element) or an appendix
@@ -2494,7 +2539,8 @@ class TextWriter:
     #    extension.  For Internet-Drafts, the value for this attribute should
     #    be "draft-ietf-somewg-someprotocol-07", not
     #    "draft-ietf-somewg-someprotocol-07.txt".
-    # 
+
+
     # 2.48.  <sourcecode>
     # 
     #    This element allows the inclusion of source code into the document.
@@ -2595,7 +2641,8 @@ class TextWriter:
     #    updated over time.  Thus, a consumer of v3 XML should not cause a
     #    failure when it encounters an unexpected type or no type is
     #    specified.
-    # 
+
+
     # 2.49.  <street>
     # 
     #    Provides a street address.
@@ -2607,7 +2654,8 @@ class TextWriter:
     # 2.49.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the street address.
-    # 
+
+
     # 2.50.  <strong>
     # 
     #    Indicates text that is semantically strong.  Text enclosed within
@@ -2764,7 +2812,8 @@ class TextWriter:
     # 2.54.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this table.
-    # 
+
+
     # 2.55.  <tbody>
     # 
     #    A container for a set of body rows for a table.
@@ -2778,7 +2827,8 @@ class TextWriter:
     # 2.55.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the tbody.
-    # 
+
+
     # 2.56.  <td>
     # 
     #    A cell in a table row.
@@ -2865,7 +2915,8 @@ class TextWriter:
     #    The number of rows that the cell is to span.  For example, setting
     #    "rowspan='3'" indicates that the cell occupies the same vertical
     #    space as three rows.
-    # 
+
+
     # 2.57.  <tfoot>
     # 
     #    A container for a set of footer rows for a table.
@@ -2879,7 +2930,8 @@ class TextWriter:
     # 2.57.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the tfoot.
-    # 
+
+
     # 2.58.  <th>
     # 
     #    A cell in a table row.  When rendered, this will normally come out in
@@ -2968,7 +3020,8 @@ class TextWriter:
     #    The number of rows that the cell is to span.  For example, setting
     #    "rowspan='3'" indicates that the cell occupies the same vertical
     #    space as three rows.
-    # 
+
+
     # 2.59.  <thead>
     # 
     #    A container for a set of header rows for a table.
@@ -2982,6 +3035,7 @@ class TextWriter:
     # 2.59.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the thead.
+
 
     # 2.60.  <title>
     # 
@@ -3015,7 +3069,8 @@ class TextWriter:
     # 2.60.2.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the title.
-    # 
+
+
     # 2.61.  <tr>
     # 
     #    A row of a table.
@@ -3034,7 +3089,8 @@ class TextWriter:
     # 2.61.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the row.
-    # 
+
+
     # 2.62.  <tt>
     # 
     #    Causes the text to be displayed in a constant-width font.  This
@@ -3092,25 +3148,28 @@ class TextWriter:
         indent = 2 if empty else 3
         e._empty = empty
         #
-        normal = e.get('spacing') == 'normal'
-        ljoin  = '\n\n' if normal else '\n'
+        e._initial_text = self.get_ul_li_initial_text
+        #
+        compact = e.get('spacing') == 'compact'
+        ljoin  = '\n' if compact else '\n\n'
         #
         depth = len([ a for a in e.iterancestors(e.tag) ])
         symbols = self.options.list_symbols
         e._symbol = '' if empty else symbols[depth%len(symbols)]
         #
+        hang = len(e._symbol)+2
+        # XXX Workaround for schema deficiency:
+        if empty:
+            first = self.render(e[0], **kwargs)
+            if first:
+                hang = len(first.split()[0])+2
+        #
         kwargs['joiners'].update({
-            None:   joiner('', ' ', 0, 3),
-            't':    joiner('', ' ', 0, 3),
+            None:   joiner('', ljoin, indent, 0),
+            't':    joiner('', ' ', 0, hang),
             'li':   joiner('', ljoin, 0, 0),
         })
         #
-        block_tags = self.get_valid_child_tags('li') - self.inline_tags - set(['t'])
-        for tag in block_tags:
-            kwargs['joiners'].update({tag: joiner('', ljoin, indent, 0), })
-        #debug.pprint('kwargs["joiners"]')
-        #
-        e._setup = self.get_ul_setup
         # rendering
         text = ""
         for c in e.getchildren():
@@ -3128,7 +3187,8 @@ class TextWriter:
     #    This element appears as a child element of <address> (Section 2.2).
     # 
     #    Content model: only text content.
-    # 
+
+
     # 2.65.  <workgroup>
     # 
     #    This element is used to specify the Working Group (IETF) or Research
@@ -3145,7 +3205,8 @@ class TextWriter:
     #    This element appears as a child element of <front> (Section 2.26).
     # 
     #    Content model: only text content.
-    # 
+
+
     # 2.66.  <xref>
     # 
     #    A reference to an anchor in this document.  Formatters that have
