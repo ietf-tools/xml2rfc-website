@@ -884,7 +884,7 @@
        attribute anchor { xsd:ID }?,
        attribute title { text }?,
        name?,
-       (reference | referencegroup)*
+       (references+ | (reference | referencegroup)*)
      }
 
    reference =

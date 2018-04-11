@@ -2012,12 +2012,17 @@
       <optional>
         <ref name="name"/>
       </optional>
-      <zeroOrMore>
-        <choice>
-          <ref name="reference"/>
-          <ref name="referencegroup"/>
-        </choice>
-      </zeroOrMore>
+      <choice>
+        <oneOrMore>
+          <ref name="references"/>
+        </oneOrMore>
+        <zeroOrMore>
+          <choice>
+            <ref name="reference"/>
+            <ref name="referencegroup"/>
+          </choice>
+        </zeroOrMore>
+      </choice>
     </element>
   </define>
   <define name="reference">
