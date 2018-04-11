@@ -3,7 +3,10 @@
 from __future__ import unicode_literals, print_function
 
 import calendar
+import copy
 import datetime
+import os
+import re
 import textwrap
 
 from codecs import open
@@ -62,6 +65,9 @@ class TextWriter:
         self.options = options
         self.date = date
         self.index_items = []
+        self.v3_rng_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'v3.rng')
+        self.schema = etree.ElementTree(file=self.v3_rng_file)
+        self.inline_tags = set(['bcp14', 'cref', 'em', 'eref', 'iref', 'relref', 'strong', 'sub', 'sup', 'tt', 'xref'])
 
         self.errors = []
         if options.debug:
@@ -105,10 +111,18 @@ class TextWriter:
         log.write("Cannot continue, quitting now")
         sys.exit(1)
 
+    def get_valid_child_tags(self, tag):
+        refs = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:ref" % tag, namespaces=utils.namespaces)
+        names = set([ r.get('name') for r in refs ])
+        return names
+
     def write(self, filename):
         """ Public method to write the XML document to a file """
-
-        text = self.render(width=72)
+        joiners = {
+            None:   joiner('', '\n\n', 0, 0),
+            #'':     joiner('', ' ', 0, 0),
+        }
+        text = self.render(width=72, joiners=joiners)
         if self.errors:
             log.write("Not creating output file due to errors (see above)")
             return
@@ -121,9 +135,10 @@ class TextWriter:
             log.write('Created file', filename)
 
     #@debug.trace
-    def render(self, e=None, **kwargs):
+    def render(self, e=None, **kw):
         if isinstance(e, etree._Comment):
             return ''
+        kwargs = copy.deepcopy(kw)
         e = self.root if e is None else e
         func_name = "render_%s" % (e.tag,)
         func = getattr(self, func_name, self.default_renderer)
@@ -141,9 +156,7 @@ class TextWriter:
         Render element e, then format and join it to text using the
         appropriate settings in joiners.
         '''
-        if not 'joiners' in kwargs:
-            kwargs['joiners'] = { None:  joiner('', '\n\n', 3, 0), }
-        #
+        assert 'joiners' in kwargs
         joiners = kwargs['joiners']
         j = joiners[e.tag] if e.tag in joiners else joiners[None]
         p = e.getparent()
@@ -213,6 +226,7 @@ class TextWriter:
     # 
     #    Document-wide unique identifier for the Abstract.
     def render_abstract(self, e, **kwargs):
+        kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
         text = "Abstract"
         for c in e.getchildren():
             text = self.join(text, c, **kwargs)
@@ -517,7 +531,6 @@ class TextWriter:
     # 
     #    This element appears as a child element of <rfc> (Section 2.45).
     def render_back(self, e, **kwargs):
-        kwargs['joiners'] = { None:       joiner('', '\n\n', 0, 0), } # default 
         text = ""
         for c in e.getchildren():
             text = self.join(text, c, **kwargs)
@@ -579,7 +592,6 @@ class TextWriter:
     # 
     #    This element appears as a child element of <front> (Section 2.26).
     def render_boilerplate(self, e, **kwargs):
-        kwargs['joiners'] = { None:   joiner('', '\n\n', 0, 0), }
         text = ""
         for c in e.getchildren():
             numbered = c.get('numbered')
@@ -1001,10 +1013,7 @@ class TextWriter:
     # 
     #    Deprecated.
     def render_figure(self, e, **kwargs):
-        kwargs['joiners'] = {
-            None:   joiner('', '\n\n', 3, 0),
-            'name': joiner('', ': ', 0, 0),
-        }
+        kwargs['joiners'].update({ 'name': joiner('', ': ', 0, 0), })
         #
         pn = e.get('pn')
         num = pn.split('-')[1].capitalize()
@@ -1380,50 +1389,28 @@ class TextWriter:
     #    Document-wide unique identifier for this list item.
     def render_li(self, e, **kwargs):
         p = e.getparent()
-        if   p.tag == 'dl':
-            text, kwargs = self.get_dl_setup(e, p, **kwargs)
-        elif p.tag == 'ol':
-            text, kwargs = self.get_ol_setup(e, p, **kwargs)
-        elif p.tag == 'ul':
-            text, kwargs = self.get_ul_setup(e, p, **kwargs)
+        text = p._setup(e, p)
         for c in e.getchildren():
             text = self.join(text, c, **kwargs)
         return text
 
-    def get_dl_setup(self, e, p, **kwargs):
+    def get_dl_setup(self, e, p):
         text = e.text or ''
-        return text, kwargs
+        return text
 
-    def get_ol_setup(self, e, p, **kwargs):
-        text = e.text or ''
-        return text, kwargs
+    def get_ol_setup(self, e, p):
+        text = p._format % p._int2str(p._counter)
+        text += '  ' + e.text.lstrip() if e.text else ' '
+        p._counter += 1
+        return text
 
-    def get_ul_setup(self, e, p, **kwargs):
-        empty = p.get('empty') == 'true'
-        #
-        ind = 2 if empty else 3
-        kwargs['joiners'] = {
-            None:           joiner('', ' ', 0, 3),
-            'ul':           joiner('', '\n', ind, 0),
-            'dl':           joiner('', '\n', ind, 0),
-            'ol':           joiner('', '\n', ind, 0),
-            'artwork':      joiner('', '\n\n', ind, 0),
-            'figure':       joiner('', '\n\n', ind, 0),
-            'sourcecode':   joiner('', '\n\n', ind, 0),
-        }
-        #
-        depth = len([ a for a in e.iterancestors(e.tag) ])
-        #
-        symbols = self.options.list_symbols
-        if empty:
+    def get_ul_setup(self, e, p):
+        if p._empty:
             text = e.text or ''
         else:
-            text  = symbols[depth%len(symbols)]
-            if e.text:
-                text += '  ' + e.text.strip()
-            else:
-                text += ' '
-        return text, kwargs
+            text  = p._symbol
+            text += '  ' + e.text.lstrip() if e.text else ' '
+        return text
 
     # 2.30.  <link>
     # 
@@ -1544,6 +1531,7 @@ class TextWriter:
     # 
     #        *  <ul> elements (Section 2.63)
     def render_note(self, e, **kwargs):
+        kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
         text = ""
         if e[0].tag != 'name':
             text = "Note"
@@ -1659,7 +1647,48 @@ class TextWriter:
     # 
     #    If no type attribute is given, the default type is the same as
     #    "type='%d.'".
-
+    def render_ol(self, e, **kwargs):
+        # setup and validation
+        int2str = {
+            None:   lambda n: tuple(),
+            'a':    lambda n: tuple([utils.int2letter(n)]),
+            'A':    lambda n: tuple([utils.int2letter(n).upper()]),
+            'c':    lambda n: tuple([utils.int2letter(n)]),
+            'C':    lambda n: tuple([utils.int2letter(n).upper()]),
+            '1':    lambda n: tuple([n]),
+            'd':    lambda n: tuple([n]),
+            'i':    lambda n: tuple([utils.int2roman(n)]),
+            'I':    lambda n: tuple([utils.int2roman(n).upper()]),
+        }
+        start = e.get('start')
+        if not start.isdigit():
+            self.warn(e, "Expected a numeric value for the 'start' attribute, but found %s" % (etree.tostring(e), ))
+            start = '1'
+        e._counter = int(start)
+        type = e.get('type')
+        if not type:
+            self.warn(e, "Expected the 'type' attribute to have a string value, but found %s" % (etree.tostring(e), ))
+            type = '1'
+        e._type = type
+        if len(type) > 1:
+            formspec = re.search('%([cCdiI])', type)
+            if formspec:
+                fchar = formspec.group(1)
+                fspec = formspec.group(0)
+                e._format = type.replace(fspec, '%s')
+            else:
+                fchar = None
+                e._format = type
+        else:
+            fchar = type.lower()
+            e._format = '%s.'
+        e._int2str = int2str[fchar]
+        e._setup = self.get_ol_setup
+        # rendering
+        text = ""
+        for c in e.getchildren():
+            text = self.join(text, c, **kwargs)
+        return text
 
     # 2.35.  <organization>
     # 
@@ -2347,12 +2376,12 @@ class TextWriter:
     #    o  "default" (default)
     #@debug.trace
     def render_section(self, e, **kwargs):
-        kwargs['joiners'] = {
+        kwargs['joiners'].update({
             None:       joiner('', '\n\n', 3, 0), # default
             't':        joiner('', '\n\n', 3, 0),
             'name':     joiner('', '  ', 0, 0),
             'section':  joiner('', '\n\n', 0, 0),
-            }
+        })
         text = ""
         pn = e.get('pn')
         if e.get('numbered') == 'true':
@@ -3058,11 +3087,31 @@ class TextWriter:
     # 
     #    o  "compact"
     def render_ul(self, e, **kwargs):
-        if e.get('spacing') == 'compact':
-            joiners = { 'li':   joiner('', '\n', 0, 0), }
-        else:
-            joiners = { 'li':   joiner('', '\n\n', 0, 0), }
-        kwargs['joiners'] = joiners
+        # setup and validation
+        empty = e.get('empty') == 'true'
+        indent = 2 if empty else 3
+        e._empty = empty
+        #
+        normal = e.get('spacing') == 'normal'
+        ljoin  = '\n\n' if normal else '\n'
+        #
+        depth = len([ a for a in e.iterancestors(e.tag) ])
+        symbols = self.options.list_symbols
+        e._symbol = '' if empty else symbols[depth%len(symbols)]
+        #
+        kwargs['joiners'].update({
+            None:   joiner('', ' ', 0, 3),
+            't':    joiner('', ' ', 0, 3),
+            'li':   joiner('', ljoin, 0, 0),
+        })
+        #
+        block_tags = self.get_valid_child_tags('li') - self.inline_tags - set(['t'])
+        for tag in block_tags:
+            kwargs['joiners'].update({tag: joiner('', ljoin, indent, 0), })
+        #debug.pprint('kwargs["joiners"]')
+        #
+        e._setup = self.get_ul_setup
+        # rendering
         text = ""
         for c in e.getchildren():
             text = self.join(text, c, **kwargs)
