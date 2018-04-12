@@ -891,6 +891,14 @@
           </choice>
         </attribute>
         <optional>
+          <attribute name="hanging" a:defaultValue="false">
+            <choice>
+              <value>false</value>
+              <value>true</value>
+            </choice>
+          </attribute>
+        </optional>
+        <optional>
           <attribute name="pn"/>
         </optional>
       </optional>
