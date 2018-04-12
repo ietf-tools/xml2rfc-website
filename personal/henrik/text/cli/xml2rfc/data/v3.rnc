@@ -388,7 +388,9 @@
        [ a:defaultValue = "normal" ]
        attribute spacing { "normal" | "compact" }?,
        ([ a:defaultValue = "false" ]
-        attribute empty { "false" | "true" },
+        attribute empty { "false" | "true"},
+	[ a:defaultValue = "false" ]
+        attribute bare { "false" | "true"}?,
         attribute pn { text }?)?,
        li+
      }
