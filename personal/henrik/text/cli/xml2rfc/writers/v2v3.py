@@ -13,7 +13,7 @@ from lxml import etree
 from lxml.etree import Element, Comment, CDATA, _Comment
 
 from xml2rfc import log
-from xml2rfc.utils import find_duplicate_ids
+from xml2rfc.utils import find_duplicate_ids, hastext, isempty
 from xml2rfc.writers.base import default_options
 
 
@@ -44,21 +44,6 @@ def copyattr(a, b):
     for k in a.keys():
         v = a.get(k)
         b.set(k, v)
-
-def isempty(e):
-    return not ((len(e) and any([ not isinstance(c, _Comment) for c in e.iterchildren() ]))
-                or (e.text and e.text.strip()) or (e.tail and e.tail.strip()))
-
-def isblock(e):
-    return e.tag in [ 'artwork', 'dl', 'figure', 'ol', 'sourcecode', 't', 'ul', ]
-
-def iscomment(e):
-    return isinstance(e, _Comment)
-
-def hastext(e):
-    head = [ e.text ] if e.text and e.text.strip() else []
-    items = head + [ c for c in e.iterchildren() if not (isblock(c) or iscomment(c))] + [ c.tail for c in e.iterchildren() if c.tail and c.tail.strip() ]
-    return items
 
 class V2v3XmlWriter:
     """ Writes an XML file with v2 constructs converted to v3"""
@@ -285,7 +270,6 @@ class V2v3XmlWriter:
             './/seriesInfo',                # 2.47.  <seriesInfo>
             './/t',                         # 2.53.  <t>
                                             # 2.53.2.  "hangText" Attribute
-            './/li',
             './/xref',                      # 2.66.  <xref>
                                             # 2.66.1.  "format" Attribute
                                             # 2.66.2.  "pageno" Attribute
@@ -601,12 +585,6 @@ class V2v3XmlWriter:
     def element_t(self, e, p):
         if p.tag != 'list':
             stripattr(e, ['hangText', ])
-            
-    def element_li(self, e, p):
-        # if the <li> content is raw inline content, wrap in t
-        if hastext(e):
-            #debug.say('Wrap %s content ...'%(p.tag))
-            self.wrap_content(e)
 
     # 
     # 
@@ -724,6 +702,7 @@ class V2v3XmlWriter:
         #
         if   style == 'empty':
             tag = 'ul'
+            attribs['empty'] = 'true'
         elif style == 'symbols':
             tag = 'ul'
         elif style == 'hanging':
