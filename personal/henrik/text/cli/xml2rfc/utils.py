@@ -11,11 +11,12 @@ import re
 import six
 import textwrap
 
+from lxml.etree import Element, Comment, CDATA, _Comment
+
 if six.PY2:
     from urllib import quote
 else:
     from urllib.request import quote
-    
 
 try:
     import debug
@@ -638,3 +639,23 @@ def find_duplicate_ids(schema, tree):
             else:
                 seen.add(id)
     return dups
+
+def isempty(e):
+    "Return True if e has no children and no text content"
+    return not ((len(e) and any([ not isinstance(c, _Comment) for c in e.iterchildren() ]))
+                or (e.text and e.text.strip()) or (e.tail and e.tail.strip()))
+
+def isblock(e):
+    "Return True if e is a block level element"
+    return e.tag in [ 'artwork', 'dl', 'figure', 'ol', 'sourcecode', 't', 'ul', ]
+
+def iscomment(e):
+    "Return True if e is a comment"
+    return isinstance(e, _Comment)
+
+def hastext(e):
+    "Return a list of text-level immediate children"
+    head = [ e.text ] if e.text and e.text.strip() else []
+    items = head + [ c for c in e.iterchildren() if not (isblock(c) or iscomment(c))] + [ c.tail for c in e.iterchildren() if c.tail and c.tail.strip() ]
+    return items
+
