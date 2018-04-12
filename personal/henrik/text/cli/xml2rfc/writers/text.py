@@ -7,6 +7,7 @@ import copy
 import datetime
 import os
 import re
+import sys
 import textwrap
 
 from codecs import open
@@ -159,7 +160,7 @@ class TextWriter:
         assert 'joiners' in kwargs
         joiners = kwargs['joiners']
         j = joiners[e.tag] if e.tag in joiners else joiners[None]
-        p = e.getparent()
+        #p = e.getparent()
         #debug.show('p.tag, e.tag, j.indent')
         #
         kwargs['width'] -= j.indent
@@ -200,16 +201,30 @@ class TextWriter:
             text = self.join(text, c, **kwargs)
         return text
 
-    def inner_text_renderer(self, e):
+    def inner_text_renderer(self, e, **kwargs):
         text = e.text or ''
         for c in e.getchildren():
-            text += self.render(c)
+            text += self.render(c, **kwargs)
         return text
     
-    def text_renderer(self, e):
-        text = self.inner_text_renderer(e)
+    def text_renderer(self, e, **kwargs):
+        text = self.inner_text_renderer(e, **kwargs)
         text += e.tail or ''
         return text
+
+    def text_or_block_renderer(self, text, e, **kwargs):
+        # This handles the case where the element has two alternative content
+        # models, either text or block-level children; deal with them
+        # separately
+        if utils.hastext(e):
+            # deal with the non-block content as if it is content of a <t>
+            e.tag = 't'
+            text = self.join(text, e, **kwargs)
+        else:
+            for c in e.getchildren():
+                text = self.join(text, c, **kwargs)
+        return text
+
 
     # --- element rendering functions ------------------------------------------
 
@@ -755,6 +770,7 @@ class TextWriter:
             date += '%s' % year
         return date
 
+
     # 2.18.  <dd>
     # 
     #    The definition part of an entry in a definition list.
@@ -764,6 +780,8 @@ class TextWriter:
     # 2.18.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this definition.
+    def render_dd(self, e, **kwargs):
+        return self.text_or_block_renderer('', e, **kwargs)
 
 
     # 2.19.  <displayreference>
@@ -844,6 +862,31 @@ class TextWriter:
     #    o  "normal" (default)
     # 
     #    o  "compact"
+    def render_dl(self, e, **kwargs):
+        hanging = e.get('hanging') == 'true'
+        djoin  = '\n' if hanging else '  '
+        #
+        compact = e.get('spacing') == 'compact'
+        tjoin  = '\n' if compact else '\n\n'
+        #
+        hang = 3
+        for dt in e.iterchildren('dt'):
+            dt._text = self.inner_text_renderer(dt)
+            l = len(dt._text)
+            if l > hang:
+                hang = l
+        if hang > 24:                   # XXX Somewhat arbitrary choice
+            hang = 24
+        kwargs['joiners'].update({
+            'dt':       joiner('', tjoin, 0, 0),
+            'dd':       joiner('', djoin, hang-1, 0),
+        })
+        # rendering
+        text = ""
+        for c in e.getchildren():
+            text = self.join(text, c, **kwargs)
+        return text
+
 
     # 2.21.  <dt>
     # 
@@ -854,6 +897,10 @@ class TextWriter:
     # 2.21.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this term.
+    def render_dt(self, e, **kwargs):
+        kwargs['width'] -= 24
+        text = fill(self.inner_text_renderer(e), **kwargs)
+        return text
 
 
     # 2.22.  <em>
@@ -1153,7 +1200,7 @@ class TextWriter:
                 category = self.root.get('category', '')
                 series_no = self.root.get('seriesNo')
                 if category and category in strings.series_name and series_no:
-                    left.append('%s: %s' % (strings.series_name[category], series_number))
+                    left.append('%s: %s' % (strings.series_name[category], series_no))
                 else:
                     pass
                 #    [<RFC relation>:<RFC number[s]>]  Some relations between RFCs in the
@@ -1198,7 +1245,7 @@ class TextWriter:
                 if category and not category in strings.series_name:
                     self.warn(self.root, "Expected a known category, one of %s, but found '%s'" % (','.join(strings.series_name.keys()), category, ))
                 elif category and series_no:
-                    left.append('%s: %s (if approved)' % (strings.series_name[category], series_number))
+                    left.append('%s: %s (if approved)' % (strings.series_name[category], series_no))
                 else:
                     pass
                 #
@@ -1403,8 +1450,7 @@ class TextWriter:
     def render_li(self, e, **kwargs):
         p = e.getparent()
         text = p._initial_text(e, p)
-        for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+        text = self.text_or_block_renderer(text, e, **kwargs)
         return text
 
     def get_ol_li_initial_text(self, e, p):
@@ -1414,7 +1460,10 @@ class TextWriter:
         return text
 
     def get_ul_li_initial_text(self, e, p):
-        text = '' if p._empty else p._symbol + ' ' 
+        if p._bare:
+            text = ''
+        else:
+            text = p._symbol + ' ' 
         return text
 
     # 2.30.  <link>
@@ -1704,7 +1753,7 @@ class TextWriter:
             't':    joiner('', ' ',   0,      indent),
             'li':   joiner('', ljoin, 0,      0),
         })
-        
+        #
         # rendering
         text = ""
         for c in e.getchildren():
@@ -3145,9 +3194,7 @@ class TextWriter:
     def render_ul(self, e, **kwargs):
         # setup and validation
         empty = e.get('empty') == 'true'
-        indent = 2 if empty else 3
-        e._empty = empty
-        #
+        e._bare = empty and e.get('bare') == 'true'
         e._initial_text = self.get_ul_li_initial_text
         #
         compact = e.get('spacing') == 'compact'
@@ -3155,17 +3202,16 @@ class TextWriter:
         #
         depth = len([ a for a in e.iterancestors(e.tag) ])
         symbols = self.options.list_symbols
-        e._symbol = '' if empty else symbols[depth%len(symbols)]
+        e._symbol = ' ' if empty else symbols[depth%len(symbols)]
         #
         hang = len(e._symbol)+2
-        # XXX Workaround for schema deficiency:
-        if empty:
+        if e._bare:
             first = self.render(e[0], **kwargs)
             if first:
                 hang = len(first.split()[0])+2
         #
         kwargs['joiners'].update({
-            None:   joiner('', ljoin, indent, 0),
+            None:   joiner('', ljoin, 3, 0),
             't':    joiner('', ' ', 0, hang),
             'li':   joiner('', ljoin, 0, 0),
         })
