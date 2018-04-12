@@ -1469,7 +1469,6 @@ class PrepToolWriter:
             name = s.find('./name')
             if name is None:
                 self.die(s, "No name entry found for section, can't continue: %s" % (etree.tostring(s)))
-            title = ' '.join(list(name.itertext()))
             num = s.get('pn').split('-', 1)[1].replace('-', ' ').title()
             #
             t = self.element('t')
@@ -1503,7 +1502,7 @@ class PrepToolWriter:
                     li = self.element('li')
                     li.append(toc_entry_t(e))
                     if sub:
-                        ul = self.element('ul', empty='true', spacing='compact')
+                        ul = self.element('ul', empty='true', spacing='compact', bare="true")
                         for s in sub:
                             ul.append(s)
                         li.append(ul)
@@ -1512,14 +1511,12 @@ class PrepToolWriter:
                     return sub
             return []
         if self.root.get('tocInclude') == 'true':
-            max_depth = self.root.get('tocDepth') # has been set to default earler if not initially set
-            prev_depth = 0
             toc = self.element('section', numbered='false', toc='exclude')
             name = self.element('name')
             name.text = "Table of Contents"
             toc.append(name)
             self.name_insert_slugified_name(name, toc)
-            ul = self.element('ul', empty='true', spacing='compact')
+            ul = self.element('ul', empty='true', spacing='compact', bare="true")
             toc.append(ul)
             for s in toc_entries(self.root):
                 ul.append(s)
@@ -1533,15 +1530,15 @@ class PrepToolWriter:
         if self.prepped:
             return
         def letter_li(letter, letter_entries):
-            i = 'rfc.index.%s' % letter
+            anchor = 'rfc.index.%s' % letter
             li = self.element('li')
-            t = self.element('t', anchor=i)
-            xref = self.element('xref', target=i, format='default', derivedContent=letter)
+            t = self.element('t', anchor=anchor)
+            xref = self.element('xref', target=anchor, format='default', derivedContent=letter)
             xref.text = letter
             t.append(xref)
             li.append(t)
             #
-            ul = self.element('ul', empty='true', spacing='compact')
+            ul = self.element('ul', empty='true', spacing='compact', bare="true")
             li.append(ul)
             items = [ i.item for i in letter_entries ]
             for item in items:
@@ -1561,7 +1558,7 @@ class PrepToolWriter:
                 t.append(xref)
             subs = [ i.sub for i in item_entries if i.sub ]
             if subs:
-                ul = self.element('ul', empty='true', spacing='compact')
+                ul = self.element('ul', empty='true', spacing='compact', bare="true")
                 li.append(ul)
                 for sub in subs:
                     sub_entries = [ i for i in item_entries if i.sub==sub ]
@@ -1595,7 +1592,7 @@ class PrepToolWriter:
                 xref.text = letter
                 index_index.append(xref)
             # one letter entry per letter
-            index_ul = self.element('ul', empty='true', spacing='compact')
+            index_ul = self.element('ul', empty='true', spacing='compact', bare="true")
             index.append(index_ul)
             for letter in letters:
                 letter_entries = [ i for i in self.index_entries if i.item.upper().startswith(letter) ]
