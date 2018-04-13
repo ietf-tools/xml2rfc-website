@@ -10,7 +10,7 @@ import traceback as tb
 
 from io import open
 from lxml import etree
-from lxml.etree import Element, Comment, CDATA, _Comment
+from lxml.etree import Element, Comment, CDATA
 
 from xml2rfc import log
 from xml2rfc.utils import find_duplicate_ids, hastext, isempty
@@ -469,7 +469,7 @@ class V2v3XmlWriter:
     def element_figure(self, e, p):
         comments = []
         artwork = e.find('./artwork')
-        if not artwork is None:
+        if artwork != None:
             for attr in ['align', 'alt', 'src', ]:
                 if attr in e.attrib:
                     fattr = e.get(attr)
@@ -480,9 +480,18 @@ class V2v3XmlWriter:
                     else:
                         artwork.set(attr, fattr)
                     stripattr(e, [ attr ])
-        stripattr(e, ['height', 'src', 'suppress-title', 'width', ])
-        if self.options.strict:
-            stripattr(e, ['align', 'alt', ])
+            # if we have <artwork> and either no anchor and no title, or suppress-title='true',
+            # then promote the <artwork> and get rid of the <figure>
+        if artwork != None and ((not e.get('anchor') and not e.get('title')) or e.get('suppress-title') == 'true'):
+            pos = p.index(e)
+            p.remove(e)
+            p.insert(pos, artwork)
+        else:
+            stripattr(e, ['height', 'src', 'suppress-title', 'width', ])
+            if self.options.strict:
+                stripattr(e, ['align', 'alt', ])
+
+
 
     # 2.25.7.  "title" Attribute
     # 
@@ -725,7 +734,7 @@ class V2v3XmlWriter:
             attribs['group'] = e.get('counter')
             comments.append("Converting <list counter=...> to <%s group=...> " % tag)
         #
-        attribs['spacing'] = 'compact' if hasattr(e, 'pis') and e.pis['compact'] in ['yes', 'true'] else 'normal'
+        attribs['spacing'] = 'compact' if hasattr(e, 'pis') and e.pis['subcompact'] in ['yes', 'true'] else 'normal'
         #
         stripattr(e, ['counter', 'style', ])
         l = self.element(tag, **attribs)
@@ -1017,6 +1026,4 @@ class V2v3XmlWriter:
                 continue
             if c.tail != None:
                 if c.tail.strip() == '':
-                    c.tail = None        
-
-                    
+                    c.tail = None
