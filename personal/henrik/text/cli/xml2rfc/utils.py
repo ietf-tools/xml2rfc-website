@@ -11,7 +11,7 @@ import re
 import six
 import textwrap
 
-from lxml.etree import Element, Comment, CDATA, _Comment
+from lxml.etree import _Comment
 
 if six.PY2:
     from urllib import quote
@@ -159,7 +159,7 @@ class TextWrapper(textwrap.TextWrapper):
         return wrapped
 
     def fill(self, *args, **kwargs):
-        return "\n".join(self.wrap(*args, **kwargs))
+        return "\n".join(self.wrap(*args, **kwargs)).replace(u'\u00A0', ' ')
 
 
 def justify_inline(left_str, center_str, right_str, width=72):
@@ -377,6 +377,7 @@ def _replace_unicode_characters(str):
 # Auto-generated from comments in rfc2629-xhtml.ent
 _unicode_replacements = {
     u'\x09': ' ',
+    u'\xa0': ' ',
     u'\xa1': '!',
     u'\xa2': '[cents]',
     u'\xa3': 'GBP',
