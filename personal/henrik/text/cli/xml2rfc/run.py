@@ -134,6 +134,9 @@ def main():
     formatoptions.add_option('', '--legacy-list-symbols', default=False, action='store_true',
                            help='with --text: use the legacy list bullet symbols, rather than the new ones.'
                        )
+    formatoptions.add_option('', '--legacy-date-format', default=False, action='store_true',
+                           help='with --text: use the legacy date format, rather than the new one.'
+                       )
     formatoptions.add_option('', '--list-symbols', metavar='4*CHAR',
                            help='with --text: use the characters given as list bullet symbols.'
                        )
@@ -144,7 +147,7 @@ def main():
                            help='with --v2v3: replace reference elements with RFC and Internet-Draft'
                            ' seriesInfo with the appropriate XInclude element'
                        )
-    formatoptions.add_option('', '--liberal', action='store_true',
+    formatoptions.add_option('', '--accept-prepped', action='store_true',
                            help='with --preptool: accept already prepped input'
                        )
     formatoptions.add_option('', '--strict', action='store_true',
@@ -172,6 +175,9 @@ def main():
     if options.preptool:
         options.vocabulary = 'v3'
         options.no_dtd = True
+    else:
+        if options.accept_prepped:
+            sys.exit("You can only use --accept-prepped together with --preptool.")            
     if options.v2v3:
         options.vocabulary = 'v2'
     if options.basename:
