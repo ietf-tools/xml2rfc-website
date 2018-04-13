@@ -31,7 +31,8 @@ from lxml import etree
 
 
 from xml2rfc import log
-from xml2rfc.boilerplate_rfc_7841 import boilerplate_status_of_memo
+from xml2rfc.boilerplate_rfc_7841 import boilerplate_rfc_status_of_memo
+from xml2rfc.boilerplate_id_guidelines import boilerplate_draft_status_of_memo
 from xml2rfc.boilerplate_tlp import boilerplate_tlp
 from xml2rfc.utils import build_dataurl, namespaces, find_duplicate_ids
 from xml2rfc.writers.base import default_options
@@ -124,12 +125,15 @@ class PrepToolWriter:
         self.prev_section_level = 0
         self.prev_paragraph_section = None
         #
-        self.liberal = liberal if liberal != None else options.liberal
+        self.liberal = liberal if liberal != None else options.accept_prepped
         self.prepped = self.root.get('prepTime')
         #
         self.index_entries = []
         #
         self.spacer = '  '
+        #
+        self.boilerplate_https_date = datetime.date(year=2017, month=8, day=21)
+
 
     def get_attribute_names(self, tag):
         attr = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:attribute" % tag, namespaces=namespaces)
@@ -204,7 +208,7 @@ class PrepToolWriter:
         except Exception as e:
             # These warnings are occasionally incorrect -- disable this
             # output for now:
-            self.warn(e, 'Invalid document %s running preptool: %s' % (when, e,))
+            self.warn(None, 'Invalid document %s running preptool: %s' % (when, e,))
             return False
 
     def write(self, filename):
@@ -789,42 +793,56 @@ class PrepToolWriter:
         # submissionType: "IETF" | "IAB" | "IRTF" | "independent"
         # consensus: "false" | "true"
         # category: "std" | "bcp" | "exp" | "info" | "historic"
-        if self.options.rfc:
-            if self.liberal and e.xpath('./section/name[text()="Status of this Memo"]'):
+        b = e.xpath('./section/name[text()="Status of this Memo"]')
+        existing_status_of_memo = b[0] if b else None
+        if existing_status_of_memo:
+            if self.liberal:
                 self.note(e, "Boilerplate 'Status of this Memo' section exists, leaving it in place")
+                return
             else:
-                stream = self.root.get('submissionType')
-                category = self.root.get('category')
-                consensus = self.root.get('consensus')
-                workgroup = self.root.find('./front/workgroup')
-                #
-                group = workgroup.text if workgroup != None else None
-                format_dict = { 'rfc_number': self.rfcnumber }
-                if group:
-                    format_dict['group_name'] = group
-                #
-                if stream == 'IRTF' and workgroup == None:
-                    consensus = 'n/a'
-                elif stream == 'independent':
-                    consensus = 'n/a'
-                #
-                section = self.element('section', numbered='false', toc='exclude')
-                name = self.element('name')
-                name.text = "Status of this Memo"
-                section.append(name)
-                try:
-                    for para in boilerplate_status_of_memo[stream][category][consensus]:
-                        t = self.element('t')
-                        t.text = para.format(**format_dict)
-                        section.append(t)
-                except KeyError as exception:
-                    if str(exception) in ["'rfc_number'", "'group_name'"]:
-                        # Error in string expansion
-                        self.die(p, 'Expected to have a value for %s when expanding the "Status of this Memo" boilerplate, but found none.' % str(exception))
-                    else:
-                        # Error in boilerplate dictionary indexes
-                        self.die(self.root, 'Unexpected attribute combination(%s): <rfc submissionType="%s" category="%s" consensus="%s">' % (exception, stream, category, consensus))
-                e.append(section)
+                e.remove(existing_status_of_memo)
+        #
+        section = self.element('section', numbered='false', toc='exclude')
+        name = self.element('name')
+        name.text = "Status of this Memo"
+        section.append(name)
+        format_dict = {}
+        format_dict['scheme'] = 'http' if self.date < self.boilerplate_https_date else 'https'
+        #
+        if self.options.rfc:
+            stream = self.root.get('submissionType')
+            category = self.root.get('category')
+            consensus = self.root.get('consensus')
+            workgroup = self.root.find('./front/workgroup')
+            #
+            group = workgroup.text if workgroup != None else None
+            format_dict = { 'rfc_number': self.rfcnumber }
+            if group:
+                format_dict['group_name'] = group
+            #
+            if stream == 'IRTF' and workgroup == None:
+                consensus = 'n/a'
+            elif stream == 'independent':
+                consensus = 'n/a'
+            try:
+                for para in boilerplate_rfc_status_of_memo[stream][category][consensus]:
+                    t = self.element('t')
+                    t.text = para.format(**format_dict).strip()
+                    section.append(t)
+            except KeyError as exception:
+                if str(exception) in ["'rfc_number'", "'group_name'"]:
+                    # Error in string expansion
+                    self.die(p, 'Expected to have a value for %s when expanding the "Status of this Memo" boilerplate, but found none.' % str(exception))
+                else:
+                    # Error in boilerplate dictionary indexes
+                    self.die(self.root, 'Unexpected attribute combination(%s): <rfc submissionType="%s" category="%s" consensus="%s">' % (exception, stream, category, consensus))
+
+        else:
+            for para in boilerplate_draft_status_of_memo:
+                t = self.element('t')
+                t.text = para.format(**format_dict).strip()
+                section.append(t)
+        e.append(section)            
 
     # 5.4.2.3.  "Copyright Notice" Insertion
     # 
@@ -836,48 +854,55 @@ class PrepToolWriter:
     def boilerplate_insert_copyright_notice(self, e, p):
         if self.prepped:
             return
-        if self.options.rfc:
-            if self.liberal and e.xpath('./section/name[text()="Copyright Notice"]'):
+        b = e.xpath('./section/name[text()="Copyright Notice"]')
+        existing_copyright_notice = b[0] if b else None
+        if existing_copyright_notice:
+            if self.liberal:
                 self.note(e, "Boilerplate 'Copyright Notice' section exists, leaving it in place")
+                return
             else:
-                tlp_2_start_date = datetime.date(year=2009, month=2, day=15)
-                tlp_3_start_date = datetime.date(year=2009, month=9, day=12)
-                tlp_4_start_date = datetime.date(year=2009, month=12, day=28)
-                ipr = self.root.get('ipr').lower()
-                subtype = self.root.get('submissionType')
-                if not ipr:
-                    self.die(self.root, "Missing ipr attribute on <rfc> element.")
-                if not ipr.endswith('trust200902'):
-                    self.die(self.root, "Unknown ipr attribute: %s" % (self.root.get('ipr'), ))
-                #
-                if   self.date < tlp_2_start_date:
-                    self.die(e, "Cannot insert copyright statements earlier than TLP2.0, effective %s" % (tlp_2_start_date))
-                elif self.date < tlp_3_start_date:
-                    tlp = "2.0"
-                    stream = "n/a"
-                elif self.date < tlp_4_start_date:
-                    tlp = "3.0"
-                    stream = "n/a"
-                else:
-                    tlp = "4.0"
-                    stream = 'IETF' if subtype == 'IETF' else 'alt'
-                section = self.element('section', numbered='false', toc='exclude')
-                name = self.element('name')
-                name.text = "Copyright Notice"
-                section.append(name)
-                paras = boilerplate_tlp[tlp][stream][:]
-                if   ipr.startswith('nomodification'):
-                    paras += boilerplate_tlp[tlp]['noModification'][:]
-                elif ipr.startswith('noderivatives'):
-                    paras += boilerplate_tlp[tlp]['noDerivatives'][:]
-                elif ipr.startswith('pre5378'):
-                    paras += boilerplate_tlp[tlp]['pre5378'][:]
-                for para in paras:
-                    t = self.element('t')
-                    t.text = para.format(year=self.date.year)
-                    section.append(t)
-                e.append(section)
-        
+                e.remove(existing_copyright_notice)
+        #
+        tlp_2_start_date = datetime.date(year=2009, month=2, day=15)
+        tlp_3_start_date = datetime.date(year=2009, month=9, day=12)
+        tlp_4_start_date = datetime.date(year=2009, month=12, day=28)
+        ipr = self.root.get('ipr').lower()
+        subtype = self.root.get('submissionType')
+        if not ipr:
+            self.die(self.root, "Missing ipr attribute on <rfc> element.")
+        if not ipr.endswith('trust200902'):
+            self.die(self.root, "Unknown ipr attribute: %s" % (self.root.get('ipr'), ))
+        #
+        if   self.date < tlp_2_start_date:
+            self.die(e, "Cannot insert copyright statements earlier than TLP2.0, effective %s" % (tlp_2_start_date))
+        elif self.date < tlp_3_start_date:
+            tlp = "2.0"
+            stream = "n/a"
+        elif self.date < tlp_4_start_date:
+            tlp = "3.0"
+            stream = "n/a"
+        else:
+            tlp = "4.0"
+            stream = 'IETF' if subtype == 'IETF' else 'alt'
+        format_dict = {'year': self.date.year, }
+        format_dict['scheme'] = 'http' if self.date < self.boilerplate_https_date else 'https'
+        section = self.element('section', numbered='false', toc='exclude')
+        name = self.element('name')
+        name.text = "Copyright Notice"
+        section.append(name)
+        paras = []
+        paras += boilerplate_tlp[tlp][stream][:]
+        if   ipr.startswith('nomodification'):
+            paras += boilerplate_tlp[tlp]['noModification'][:]
+        elif ipr.startswith('noderivatives'):
+            paras += boilerplate_tlp[tlp]['noDerivatives'][:]
+        elif ipr.startswith('pre5378'):
+            paras += boilerplate_tlp[tlp]['pre5378'][:]
+        for para in paras:
+            t = self.element('t')
+            t.text = para.format(**format_dict).strip()
+            section.append(t)
+        e.append(section)
 
     # 5.2.7.  Section "toc" attribute
     # 
