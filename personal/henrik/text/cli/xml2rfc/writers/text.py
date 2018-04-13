@@ -34,7 +34,10 @@ joiner = namedtuple('joiner', ['init', 'join', 'indent', 'hang', ])
 def indent(text, indent=3):
     lines = []
     for l in text.splitlines():
-        lines.append(' '*indent + l)
+        if l.strip():
+            lines.append(' '*indent + l)
+        else:
+            lines.append('')
     return '\n'.join(lines)
 
 def fill(*args, **kwargs):
@@ -54,7 +57,8 @@ def center(text, width=None, **kwargs):
     lines = wrapper.wrap(text, **kwargs)
     for i in range(len(lines)):
         lines[i] = lines[i].center(width).rstrip()
-    return '\n'.join(lines)
+    text = '\n'.join(lines).replace(u'\u00A0', ' ')
+    return text
 
 
 class TextWriter:
@@ -123,7 +127,7 @@ class TextWriter:
             None:   joiner('', '\n\n', 0, 0),
             #'':     joiner('', ' ', 0, 0),
         }
-        text = self.render(width=72, joiners=joiners)
+        text = self.render(self.root, width=72, joiners=joiners)
         if self.errors:
             log.write("Not creating output file due to errors (see above)")
             return
@@ -136,11 +140,10 @@ class TextWriter:
             log.write('Created file', filename)
 
     #@debug.trace
-    def render(self, e=None, **kw):
+    def render(self, e, width, **kw):
         if isinstance(e, etree._Comment):
             return ''
         kwargs = copy.deepcopy(kw)
-        e = self.root if e is None else e
         func_name = "render_%s" % (e.tag,)
         func = getattr(self, func_name, self.default_renderer)
         if func == self.default_renderer:
@@ -149,10 +152,10 @@ class TextWriter:
             elif not e.tag in seen:
                 self.warn(e, "No renderer for <%s> found" % (e.tag, ))
                 seen.add(e.tag)
-        res = func(e, **kwargs)
+        res = func(e, width, **kwargs)
         return res
 
-    def join(self, text, e, **kwargs):
+    def join(self, text, e, width, **kwargs):
         '''
         Render element e, then format and join it to text using the
         appropriate settings in joiners.
@@ -163,9 +166,9 @@ class TextWriter:
         #p = e.getparent()
         #debug.show('p.tag, e.tag, j.indent')
         #
-        kwargs['width'] -= j.indent
+        width -= j.indent + j.hang
         kwargs['hang'] = j.hang
-        etext = self.render(e, **kwargs)
+        etext = self.render(e, width, **kwargs)
         if not isinstance(etext, basestring):
             debug.show('e.tag')
             debug.show('etext')
@@ -181,11 +184,11 @@ class TextWriter:
 
     # --- fallback rendering functions ------------------------------------------
 
-    def default_renderer(self, e, **kwargs):
+    def default_renderer(self, e, width, **kwargs):
         # This is a fallback when a more specific function doesn't exist
         text = "<%s>:%s" % (e.tag, e.text or '')
         for c in e.getchildren():
-            ctext = self.render(c, **kwargs)
+            ctext = self.render(c, width, **kwargs)
             if isinstance(ctext, list):
                 ctext = "\n\n".join(ctext)
             if ctext is None:
@@ -195,34 +198,34 @@ class TextWriter:
         text += e.tail or ''
         return text
 
-    def parts_renderer(self, e, **kwargs):
+    def parts_renderer(self, e, width, **kwargs):
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
-    def inner_text_renderer(self, e, **kwargs):
+    def inner_text_renderer(self, e, width=None, **kwargs):
         text = e.text or ''
         for c in e.getchildren():
-            text += self.render(c, **kwargs)
+            text += self.render(c, width, **kwargs)
         return text
     
-    def text_renderer(self, e, **kwargs):
+    def text_renderer(self, e, width, **kwargs):
         text = self.inner_text_renderer(e, **kwargs)
         text += e.tail or ''
         return text
 
-    def text_or_block_renderer(self, text, e, **kwargs):
+    def text_or_block_renderer(self, text, e, width, **kwargs):
         # This handles the case where the element has two alternative content
         # models, either text or block-level children; deal with them
         # separately
         if utils.hastext(e):
             # deal with the non-block content as if it is content of a <t>
             e.tag = 't'
-            text = self.join(text, e, **kwargs)
+            text = self.join(text, e, width, **kwargs)
         else:
             for c in e.getchildren():
-                text = self.join(text, c, **kwargs)
+                text = self.join(text, c, width, **kwargs)
         return text
 
 
@@ -240,11 +243,11 @@ class TextWriter:
     # 2.1.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for the Abstract.
-    def render_abstract(self, e, **kwargs):
+    def render_abstract(self, e, width, **kwargs):
         kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
         text = "Abstract"
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.2.  <address>
@@ -326,9 +329,10 @@ class TextWriter:
     # 
     #    See Section 5 for a description of how to deal with issues of using
     #    "&" and "<" characters in artwork.
-    def render_artwork(self, e, **kwargs):
+    def render_artwork(self, e, width, **kwargs):
         text = e.text or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
         text += e.tail or ''
+        text = text.strip('\n')
         return text
 
     # 2.5.1.  "align" Attribute
@@ -548,10 +552,10 @@ class TextWriter:
     #    appendices.  In <back>, <section> elements indicate appendices.
     # 
     #    This element appears as a child element of <rfc> (Section 2.45).
-    def render_back(self, e, **kwargs):
+    def render_back(self, e, width, **kwargs):
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
 
@@ -609,13 +613,13 @@ class TextWriter:
     #    this element must have the "numbered" attribute set to "false".
     # 
     #    This element appears as a child element of <front> (Section 2.26).
-    def render_boilerplate(self, e, **kwargs):
+    def render_boilerplate(self, e, width, **kwargs):
         text = ""
         for c in e.getchildren():
             numbered = c.get('numbered')
             if not numbered == 'false':
                 self.err(c, "Expected boilerplate section to have numbered='false', but found '%s'" % (numbered, ))
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.12.  <br>
@@ -745,7 +749,7 @@ class TextWriter:
     # 2.17.3.  "year" Attribute
     # 
     #    The year or years of publication.
-    def render_date(self, e, **kwargs):
+    def render_date(self, e, width, **kwargs):
         #pp = e.getparent().getparent()
         #if pp.tag == 'rfc':
         today = self.date
@@ -753,9 +757,6 @@ class TextWriter:
         month = e.get('month')
         year = e.get('year')
         #
-        date = ''
-        if day:
-            date += '%s ' % day
         if not month:
             if year == today.year:
                 month = today.month
@@ -765,7 +766,13 @@ class TextWriter:
             month = int(month)
         if month:
             month = calendar.month_name[month]
-            date += '%s %s' % (month, year)
+            if day:
+                if self.options.legacy_date_format:
+                    date = '%s %s, %s' % (month, day, year)
+                else:
+                    date = '%s %s %s' % (day, month, year)
+            else:
+                date = '%s %s' % (month, year)
         else:
             date += '%s' % year
         return date
@@ -780,8 +787,8 @@ class TextWriter:
     # 2.18.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this definition.
-    def render_dd(self, e, **kwargs):
-        return self.text_or_block_renderer('', e, **kwargs)
+    def render_dd(self, e, width, **kwargs):
+        return self.text_or_block_renderer('', e, width, **kwargs)
 
 
     # 2.19.  <displayreference>
@@ -818,7 +825,7 @@ class TextWriter:
     #    given must start with one of the following characters: 0-9, a-z, or
     #    A-Z.  The other characters in the string must be 0-9, a-z, A-Z, "-",
     #    ".", or "_".
-    def render_displayreference(self, e, **kwargs):
+    def render_displayreference(self, e, width, **kwargs):
         return ''
 
 
@@ -862,7 +869,7 @@ class TextWriter:
     #    o  "normal" (default)
     # 
     #    o  "compact"
-    def render_dl(self, e, **kwargs):
+    def render_dl(self, e, width, **kwargs):
         hanging = e.get('hanging') == 'true'
         djoin  = '\n' if hanging else '  '
         #
@@ -884,7 +891,7 @@ class TextWriter:
         # rendering
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
 
@@ -897,9 +904,9 @@ class TextWriter:
     # 2.21.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this term.
-    def render_dt(self, e, **kwargs):
-        kwargs['width'] -= 24
-        text = fill(self.inner_text_renderer(e), **kwargs)
+    def render_dt(self, e, width, **kwargs):
+        width -= 24
+        text = fill(self.inner_text_renderer(e), width=width, **kwargs)
         return text
 
 
@@ -909,7 +916,7 @@ class TextWriter:
     #    this element will be displayed as italic after processing.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_em(self, e, **kwargs):
+    def render_em(self, e, width, **kwargs):
         # Render text with leading and trailing '_'
         text = '_%s_' % self.inner_text_renderer(e)
         text += e.tail or ''
@@ -984,7 +991,7 @@ class TextWriter:
     #    URI of the link target [RFC3986].  This must begin with a scheme name
     #    (such as "https://") and thus not be relative to the URL of the
     #    current document.
-    def render_eref(self, e, **kwargs):
+    def render_eref(self, e, width, **kwargs):
         target = e.get('target')
         if not target:
             self.warn(e, "Expected the 'target' attribute to have a value, but found %s" % (etree.tostring(e), ))
@@ -1071,8 +1078,11 @@ class TextWriter:
     # 2.25.8.  "width" Attribute
     # 
     #    Deprecated.
-    def render_figure(self, e, **kwargs):
-        kwargs['joiners'].update({ 'name': joiner('', ': ', 0, 0), })
+    def render_figure(self, e, width, **kwargs):
+        kwargs['joiners'].update({
+            'name':     joiner('', ': ', 0, 0),
+            'artwork':  joiner('', '', 0, 0),
+        })
         #
         pn = e.get('pn')
         num = pn.split('-')[1].capitalize()
@@ -1081,11 +1091,11 @@ class TextWriter:
         if children[0].tag == 'name':
             name = children[0]
             children = children[1:]
-            title = self.join(title, name, **kwargs)
+            title = self.join(title, name, width, **kwargs)
         text = ""
         for c in children:
-            text = self.join(text, c, **kwargs)
-        text += '\n\n'+center(title, width=kwargs['width']).rstrip()
+            text = self.join(text, c, width, **kwargs)
+        text += '\n\n'+center(title, width).rstrip()
         return text
 
     # 2.26.  <front>
@@ -1111,20 +1121,20 @@ class TextWriter:
     # 
     # ...
     # 
-    def render_front(self, e, **kwargs):
+    def render_front(self, e, width, **kwargs):
         if e.getparent().tag == 'reference':
-            return self.render_reference_front(e, **kwargs)
+            return self.render_reference_front(e, width, **kwargs)
         else:
-            parts = []
-            parts.append(self.render_first_page_top(e, **kwargs))
+            parts = ['\n\n']
+            parts.append(self.render_first_page_top(e, width, **kwargs))
             for c in e.getchildren():
                 if c.tag in ['title', 'seriesInfo', 'author', 'date', 'area', 'workgroup', 'keyword']:
                     # handled in render_first_page_top()
                     continue
-                parts.append(self.render(c, **kwargs))
+                parts.append(self.render(c, width, **kwargs))
         return '\n\n'.join(parts)
 
-    def render_first_page_top(self, e, **kwargs):
+    def render_first_page_top(self, e, width, **kwargs):
         def join_cols(left, right):
             "Join left and right columns of page top into page top text"
             l = max(len(left), len(right))
@@ -1306,7 +1316,7 @@ class TextWriter:
                     if this.org:
                         right.append(this.org)
                 prev = this
-            right.append(self.render_date(front.find('./date'), **kwargs))
+            right.append(self.render_date(front.find('./date'), width, **kwargs))
             return right
         #
         left  = get_left(e)
@@ -1314,11 +1324,11 @@ class TextWriter:
         #
         first_page_header = join_cols(left, right)
         first_page_header += '\n\n'
-        first_page_header += self.render_title(e.find('./title'), **kwargs)
+        first_page_header += self.render_title(e.find('./title'), width, **kwargs)
         return first_page_header
 
-    def render_reference_front(self, e, **kwargs):
-        return self.default_renderer(e, **kwargs)
+    def render_reference_front(self, e, width, **kwargs):
+        return self.default_renderer(e, width, **kwargs)
 
     # 2.27.  <iref>
     # 
@@ -1348,7 +1358,7 @@ class TextWriter:
     #    (Section 3.9).
     # 
     #    Content model: this element does not have any contents.
-    def render_iref(self, e, **kwargs):
+    def render_iref(self, e, width, **kwargs):
         p = e.getparent()
         self.index_items.append(index_item(e.get('item'), e.get('subitem'), p.get('pn'), None))
         return ''
@@ -1447,10 +1457,10 @@ class TextWriter:
     # 2.29.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this list item.
-    def render_li(self, e, **kwargs):
+    def render_li(self, e, width, **kwargs):
         p = e.getparent()
         text = p._initial_text(e, p)
-        text = self.text_or_block_renderer(text, e, **kwargs)
+        text = self.text_or_block_renderer(text, e, width, **kwargs)
         return text
 
     def get_ol_li_initial_text(self, e, p):
@@ -1499,7 +1509,7 @@ class TextWriter:
     #    This element appears as a child element of <rfc> (Section 2.45).
     # 
     #    Content model: this element does not have any contents.
-    def render_link(self, e, **kwargs):
+    def render_link(self, e, width, **kwargs):
         return ''
 
     # 2.30.1.  "href" Attribute (Mandatory)
@@ -1522,11 +1532,11 @@ class TextWriter:
     #    Content model:
     # 
     #    One or more <section> elements (Section 2.46)
-    def render_middle(self, e, **kwargs):
+    def render_middle(self, e, width, **kwargs):
         kwargs['joiners'] = { None:       joiner('', '\n\n', 0, 0), } # default 
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.32.  <name>
@@ -1556,7 +1566,7 @@ class TextWriter:
     # 
     #    o  <xref> elements (Section 2.66)
     #@debug.trace
-    def render_name(self, e, **kwargs):
+    def render_name(self, e, width, **kwargs):
         return self.inner_text_renderer(e).strip()
 
     # 2.33.  <note>
@@ -1585,13 +1595,13 @@ class TextWriter:
     #        *  <t> elements (Section 2.53)
     # 
     #        *  <ul> elements (Section 2.63)
-    def render_note(self, e, **kwargs):
+    def render_note(self, e, width, **kwargs):
         kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
         text = ""
         if e[0].tag != 'name':
             text = "Note"
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.33.1.  "removeInRFC" Attribute
@@ -1703,7 +1713,7 @@ class TextWriter:
     # 
     #    If no type attribute is given, the default type is the same as
     #    "type='%d.'".
-    def render_ol(self, e, **kwargs):
+    def render_ol(self, e, width, **kwargs):
         # setup and validation
         int2str = {
             None:   lambda n: tuple(),
@@ -1757,7 +1767,7 @@ class TextWriter:
         # rendering
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.35.  <organization>
@@ -1996,7 +2006,7 @@ class TextWriter:
     # 2.42.2.  "title" Attribute
     # 
     #    Deprecated.  Use <name> instead.
-    def render_references(self, e, **kwargs):
+    def render_references(self, e, width, **kwargs):
         kwargs['joiners'].update({
             None:           joiner('', '\n\n', 3, 0),
             'name':         joiner('', '  ', 0, 0),
@@ -2006,7 +2016,7 @@ class TextWriter:
         pn = e.get('pn')
         text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
         
 
@@ -2209,11 +2219,11 @@ class TextWriter:
     #    3.  One <middle> element (Section 2.31)
     # 
     #    4.  One optional <back> element (Section 2.8)
-    def render_rfc(self, e, **kwargs):
+    def render_rfc(self, e, width, **kwargs):
         paginated = kwargs.pop('paginated', False)
         parts = []
         for c in e.getchildren():
-            ctext = self.render(c, **kwargs)
+            ctext = self.render(c, width, **kwargs)
             if ctext:
                 if isinstance(ctext, list):
                     parts += ctext
@@ -2469,7 +2479,7 @@ class TextWriter:
     # 
     #    o  "default" (default)
     #@debug.trace
-    def render_section(self, e, **kwargs):
+    def render_section(self, e, width, **kwargs):
         kwargs['joiners'].update({
             None:       joiner('', '\n\n', 3, 0), # default
             't':        joiner('', '\n\n', 3, 0),
@@ -2481,7 +2491,7 @@ class TextWriter:
         if e.get('numbered') == 'true':
             text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
 
     # 2.47.  <seriesInfo>
@@ -2711,7 +2721,7 @@ class TextWriter:
     #    this element will be displayed as bold after processing.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_strong(self, e, **kwargs):
+    def render_strong(self, e, width, **kwargs):
         text = '*%s*' % self.inner_text_renderer(e)
         text += e.tail or ''
         return text
@@ -2723,7 +2733,7 @@ class TextWriter:
     #    letter-height lower than normal text.  This element can be combined
     #    with other character formatting elements, and the formatting will be
     #    additive.
-    def render_sub(self, e, **kwargs):
+    def render_sub(self, e, width, **kwargs):
         text = '_(%s)' % self.inner_text_renderer(e)
         text += e.tail or ''
         return text
@@ -2735,7 +2745,7 @@ class TextWriter:
     #    letter-height higher than normal text.  This element can be combined
     #    with other character formatting elements, and the formatting will be
     #    additive.
-    def render_sup(self, e, **kwargs):
+    def render_sup(self, e, width, **kwargs):
         text = '^(%s)' % self.inner_text_renderer(e)
         text += e.tail or ''
         return text
@@ -2824,8 +2834,8 @@ class TextWriter:
     #    o  "false" (default)
     # 
     #    o  "true"
-    def render_t(self, e, **kwargs):
-        text = fill(self.inner_text_renderer(e), **kwargs)
+    def render_t(self, e, width, **kwargs):
+        text = fill(self.inner_text_renderer(e), width=width, **kwargs)
         return text
 
     # 2.54.  <table>
@@ -3098,16 +3108,15 @@ class TextWriter:
     #    This element appears as a child element of <front> (Section 2.26).
     # 
     #    Content model: only text content.
-    def render_title(self, e, **kwargs):
+    def render_title(self, e, width, **kwargs):
         pp = e.getparent().getparent()
         if self.options.rfc:
-            return center(fill(e.text.strip(), **kwargs))
+            return center(fill(e.text.strip(), width=width, **kwargs))
         else:
-            title = center(fill(e.text.strip(), **kwargs))
+            title = center(fill(e.text.strip(), width=width, **kwargs))
             if pp.tag == 'rfc':
                 doc_name = self.root.get('docName')
                 if doc_name:
-                    width = kwargs.get('width', 72)
                     title += '\n'+doc_name.strip().center(width).rstrip()
             return title
 
@@ -3145,7 +3154,7 @@ class TextWriter:
     #    Causes the text to be displayed in a constant-width font.  This
     #    element can be combined with other character formatting elements, and
     #    the formatting will be additive.
-    def render_tt(self, e, **kwargs):
+    def render_tt(self, e, width, **kwargs):
         text = '"%s"' % self.inner_text_renderer(e)
         text += e.tail or ''
         return text
@@ -3191,7 +3200,7 @@ class TextWriter:
     #    o  "normal" (default)
     # 
     #    o  "compact"
-    def render_ul(self, e, **kwargs):
+    def render_ul(self, e, width, **kwargs):
         # setup and validation
         empty = e.get('empty') == 'true'
         e._bare = empty and e.get('bare') == 'true'
@@ -3206,7 +3215,7 @@ class TextWriter:
         #
         hang = len(e._symbol)+2
         if e._bare:
-            first = self.render(e[0], **kwargs)
+            first = self.render(e[0], width, **kwargs)
             if first:
                 hang = len(first.split()[0])+2
         #
@@ -3219,7 +3228,7 @@ class TextWriter:
         # rendering
         text = ""
         for c in e.getchildren():
-            text = self.join(text, c, **kwargs)
+            text = self.join(text, c, width, **kwargs)
         return text
         
 
@@ -3272,7 +3281,7 @@ class TextWriter:
     #    (Section 2.62), and <ttcol> (Section 3.9).
     # 
     #    Content model: only text content.
-    def render_xref(self, e, **kwargs):
+    def render_xref(self, e, width, **kwargs):
         text = e.get('derivedContent')
         if text is None:
             self.die(e, "Found an <xref> without derivedContent: %s" % (etree.tostring(e),))
