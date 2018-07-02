@@ -866,7 +866,7 @@ class PrepToolWriter:
         tlp_2_start_date = datetime.date(year=2009, month=2, day=15)
         tlp_3_start_date = datetime.date(year=2009, month=9, day=12)
         tlp_4_start_date = datetime.date(year=2009, month=12, day=28)
-        ipr = self.root.get('ipr').lower()
+        ipr = self.root.get('ipr', '').lower()
         subtype = self.root.get('submissionType')
         if not ipr:
             self.die(self.root, "Missing ipr attribute on <rfc> element.")
