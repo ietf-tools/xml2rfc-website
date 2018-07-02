@@ -894,7 +894,7 @@ class TextWriter:
     def render_dd(self, e, width, **kwargs):
         dt = kwargs.pop('prev')
         term = self.render_dt(dt, width, **kwargs)
-        kwargs['first'] = len(term)+len(kwargs['joiners']['dd'].join)
+        #kwargs['first'] = len(term)+len(kwargs['joiners']['dd'].join)
         text = self.text_or_block_renderer('', e, width, **kwargs).lstrip()
         return text
 
