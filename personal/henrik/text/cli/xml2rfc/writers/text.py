@@ -1,10 +1,11 @@
 # Copyright The IETF Trust 2018, All Rights Reserved
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
+from __future__ import unicode_literals, print_function, division
 
 import calendar
 import copy
 import datetime
+import inspect
 import os
 import re
 import sys
@@ -26,28 +27,34 @@ from xml2rfc.writers.base import default_options
 from xml2rfc import utils
 
 
-wrapper = utils.TextWrapper(width=72, fix_sentence_endings=True, break_on_hyphens=False)
+wrapper = utils.TextWrapper(width=72, break_on_hyphens=False)
 seen = set()
 index_item = namedtuple('indexitem', ['item', 'subitem', 'anchor', 'page', ])
-joiner = namedtuple('joiner', ['init', 'join', 'indent', 'hang', ])
+joiner = namedtuple('joiner', ['init', 'join', 'first', 'indent', 'hang', ])
 
-def indent(text, indent=3):
+def indent(text, indent=3, hang=0):
     lines = []
     for l in text.splitlines():
         if l.strip():
-            lines.append(' '*indent + l)
+            if lines:
+                lines.append(' '*(indent+hang) + l)
+            else:
+                lines.append(' '*indent + l)
         else:
             lines.append('')
     return '\n'.join(lines)
 
 def fill(*args, **kwargs):
     kwargs.pop('joiners', None)
+    kwargs.pop('prev', None)
     #
     indent = kwargs.pop('indent', 0)
     hang   = kwargs.pop('hang', 0)
-    initial=' '*indent
+    first  = kwargs.pop('first', 0)
+    initial=' '*(first+indent)
     subsequent_indent = ' '*(indent+hang)
-    return wrapper.fill(*args, initial=initial, subsequent_indent=subsequent_indent, **kwargs)
+    result = wrapper.fill(*args, initial=initial, subsequent_indent=subsequent_indent, **kwargs)
+    return result
 
 def center(text, width=None, **kwargs):
     # avoid centered text extending all the way to the margins
@@ -59,6 +66,10 @@ def center(text, width=None, **kwargs):
         lines[i] = lines[i].center(width).rstrip()
     text = '\n'.join(lines).replace(u'\u00A0', ' ')
     return text
+
+def minwidth(text):
+    words = text.split()
+    return min([ len(w) for w in words ]+[0])
 
 
 class TextWriter:
@@ -73,13 +84,15 @@ class TextWriter:
         self.v3_rng_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'v3.rng')
         self.schema = etree.ElementTree(file=self.v3_rng_file)
         self.inline_tags = set(['bcp14', 'cref', 'em', 'eref', 'iref', 'relref', 'strong', 'sub', 'sup', 'tt', 'xref'])
-
+        self.refname_mapping = dict( (e.get('anchor'), e.get('anchor')) for e in self.root.xpath('.//reference') )
+        self.refname_mapping.update(dict( (e.get('target'), e.get('to')) for e in self.root.xpath('.//displayreference') ))
+        #
         self.errors = []
         if options.debug:
             found_handlers = []
             missing_handlers = []
             for tag in self.element_tags:
-                func_name = "render_%s" % (tag,)
+                func_name = "render_%s" % (tag.lower(),)
                 if getattr(self, func_name, False):
                     found_handlers.append(func_name)
                 else:
@@ -124,10 +137,12 @@ class TextWriter:
     def write(self, filename):
         """ Public method to write the XML document to a file """
         joiners = {
-            None:   joiner('', '\n\n', 0, 0),
-            #'':     joiner('', ' ', 0, 0),
+            None:   joiner('', '\n\n', '', 0, 0),
+            #'':     joiner('', ' ', '', 0, 0),
         }
         text = self.render(self.root, width=72, joiners=joiners)
+        if not text.endswith('\n'):
+            text += '\n'
         if self.errors:
             log.write("Not creating output file due to errors (see above)")
             return
@@ -139,12 +154,11 @@ class TextWriter:
         if not self.options.quiet:
             log.write('Created file', filename)
 
-    #@debug.trace
     def render(self, e, width, **kw):
         if isinstance(e, etree._Comment):
             return ''
         kwargs = copy.deepcopy(kw)
-        func_name = "render_%s" % (e.tag,)
+        func_name = "render_%s" % (e.tag.lower(),)
         func = getattr(self, func_name, self.default_renderer)
         if func == self.default_renderer:
             if e.tag in self.__class__.deprecated_element_tags:
@@ -160,27 +174,55 @@ class TextWriter:
         Render element e, then format and join it to text using the
         appropriate settings in joiners.
         '''
+        in_list = list(e.iterancestors('ul'))
         assert 'joiners' in kwargs
         joiners = kwargs['joiners']
         j = joiners[e.tag] if e.tag in joiners else joiners[None]
-        #p = e.getparent()
-        #debug.show('p.tag, e.tag, j.indent')
-        #
+#         debug.say('')
+#         debug.show('e.tag')
+#         debug.show('j')
+#         debug.show('width')
         width -= j.indent + j.hang
+        if width < minwidth(text):
+            self.die(e, "Trying to render text in a too narrow column: width: %s, text: '%s'" % (width, text))
         kwargs['hang'] = j.hang
         etext = self.render(e, width, **kwargs)
         if not isinstance(etext, basestring):
             debug.show('e.tag')
             debug.show('etext')
-        assert isinstance(etext, basestring)
+        if not isinstance(etext, basestring):
+            self.err(e, "Expected etext to be a string, found '%s': '%s'" % (type(etext), etext))
+            assert isinstance(etext, basestring)
+        itext = indent(etext, j.indent, j.hang)
         if text:
-            text += j.join + indent(etext, j.indent)
+            if '\n' in j.join:
+                text += j.join + itext
+            else:
+                text += j.join + itext.lstrip()
         else:
-            text  = j.init + indent(etext, j.indent)
+            text  = j.init + itext
         return text
 
     def element(self, tag):
         return etree.Element(tag)
+
+    def get_initials(self, author):
+        """author is an rfc2629 author element.  Return the author initials,
+        fixed up according to current flavour and policy."""
+        initials = author.attrib.get('initials', '')
+
+        initials_list = re.split("[. ]+", initials)
+        try:
+            initials_list.remove('')
+        except:
+            pass
+        if len(initials_list) > 0:
+            # preserve spacing, but make sure all parts have a trailing
+            # period
+            initials = initials.strip()
+            initials += '.' if not initials.endswith('.') else ''
+            initials = re.sub('([^.]) ', '\g<1>. ', initials)
+        return initials
 
     # --- fallback rendering functions ------------------------------------------
 
@@ -208,24 +250,26 @@ class TextWriter:
         text = e.text or ''
         for c in e.getchildren():
             text += self.render(c, width, **kwargs)
-        return text
+        return text.strip()
     
-    def text_renderer(self, e, width, **kwargs):
-        text = self.inner_text_renderer(e, **kwargs)
-        text += e.tail or ''
-        return text
+#     def text_renderer(self, e, width, **kwargs):
+#         text = self.inner_text_renderer(e, **kwargs)
+#         text += ' '+e.tail if e.tail else ''
+#         return text
 
-    def text_or_block_renderer(self, text, e, width, **kwargs):
+    def text_or_block_renderer(self, text, e, width, **kw):
         # This handles the case where the element has two alternative content
         # models, either text or block-level children; deal with them
         # separately
+        kwargs = copy.deepcopy(kw)
         if utils.hastext(e):
-            # deal with the non-block content as if it is content of a <t>
+            e = copy.deepcopy(e)
             e.tag = 't'
-            text = self.join(text, e, width, **kwargs)
+            return self.join(text, e, width, **kwargs)
         else:
             for c in e.getchildren():
                 text = self.join(text, c, width, **kwargs)
+                kwargs.pop('first', None)
         return text
 
 
@@ -244,7 +288,7 @@ class TextWriter:
     # 
     #    Document-wide unique identifier for the Abstract.
     def render_abstract(self, e, width, **kwargs):
-        kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
+        kwargs['joiners'].update({ None:       joiner('', '\n\n', '', 3, 0), })
         text = "Abstract"
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
@@ -264,7 +308,9 @@ class TextWriter:
     # 
     #    This element appears as a child element of <reference>
     #    (Section 2.40).
-
+    def render_annotation(self, e, width, **kwargs):
+        text = fill(self.inner_text_renderer(e), width=width, **kwargs)
+        return text
 
     # 2.4.  <area>
     # 
@@ -330,9 +376,10 @@ class TextWriter:
     #    See Section 5 for a description of how to deal with issues of using
     #    "&" and "<" characters in artwork.
     def render_artwork(self, e, width, **kwargs):
-        text = e.text or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
+        text = e.text.expandtabs() or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
         text += e.tail or ''
         text = text.strip('\n')
+        text = '\n'.join( [ l.rstrip() for l in text.splitlines() ] )
         return text
 
     # 2.5.1.  "align" Attribute
@@ -519,6 +566,8 @@ class TextWriter:
         if initials and not initials.endswith('.'):
             initials += '.'
         surname  = e.get('surname', '').strip()
+        fullname = e.get('fullname', '').strip()
+        name = None
         if (   initials and ascii_initials
             or surname  and ascii_surname):
             name = '%s %s (%s %s)' % (initials, surname, ascii_initials, ascii_surname)
@@ -528,9 +577,14 @@ class TextWriter:
             name = surname
         elif initials:
             self.warn(e, "Expected an author surname to go with initials, but found none: %s" % (etree.tostring(e), ))
-            name = None
+        elif fullname and len(fullname.split())>1:
+            parts = fullname.split()
+            initials = ' '.join([ "%s."%n[0].upper() for n in parts[:-1] ])
+            surname  = parts[-1]
+            name = "%s %s" % (initials, surname)
         else:
             self.warn(e, "Expected author surname and initials for the front page rendering, but found none: %s" % (etree.tostring(e), ))
+
         #
         o = e.find('./organization')
         if o != None:
@@ -546,6 +600,45 @@ class TextWriter:
             name += ', Ed.'
         return name, organization
 
+    def render_authors(self, e, width, **kwargs):
+        """
+        Render authors for reference display.  This has to take into
+        consideration the particular presentation of surnames and initials
+        used by the RFC Editor.
+        """
+        buf = []
+        authors = e.getchildren()
+        for i, author in enumerate(authors):
+            organization = author.find('organization')
+            surname = author.attrib.get('surname', '')
+            if i == len(authors) - 1 and len(authors) > 1:
+                buf.append('and ')
+            if surname:
+                initials = self.get_initials(author)
+                if i == len(authors) - 1 and len(authors) > 1:
+                    # Last author is rendered in reverse
+                    if len(initials) > 0:
+                        buf.append(initials + ' ' + \
+                                     surname)
+                    else:
+                        buf.append(surname)
+                elif len(initials) > 0:
+                    buf.append(surname + ', ' + initials)
+                else:
+                    buf.append(surname)
+                if author.attrib.get('role', '') == 'editor':
+                    buf.append(', Ed.')
+            elif organization is not None and organization.text:
+                # Use organization instead of name
+                buf.append(organization.text.strip())
+            else:
+                continue
+            if len(authors) == 2 and i == 0:
+                buf.append(' ')
+            elif i < len(authors) - 1:
+                buf.append(', ')
+        return ''.join(buf)
+
     # 2.8.  <back>
     # 
     #    Contains the "back" part of the document: the references and
@@ -556,6 +649,17 @@ class TextWriter:
         text = ""
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
+        authors = self.root.findall('./front/author')
+        s = self.element('section')
+        n = self.element('name')
+        if len(authors) > 1:
+            n.text = "Authors' Addresses"
+        else:
+            n.text = "Author's Address"
+        s.append(n)
+        for a in authors:
+            s.append(a)
+        text = self.join(text, s, width, **kwargs)
         return text
 
 
@@ -788,7 +892,11 @@ class TextWriter:
     # 
     #    Document-wide unique identifier for this definition.
     def render_dd(self, e, width, **kwargs):
-        return self.text_or_block_renderer('', e, width, **kwargs)
+        dt = kwargs.pop('prev')
+        term = self.render_dt(dt, width, **kwargs)
+        kwargs['first'] = len(term)+len(kwargs['joiners']['dd'].join)
+        text = self.text_or_block_renderer('', e, width, **kwargs).lstrip()
+        return text
 
 
     # 2.19.  <displayreference>
@@ -870,28 +978,32 @@ class TextWriter:
     # 
     #    o  "compact"
     def render_dl(self, e, width, **kwargs):
-        hanging = e.get('hanging') == 'true'
-        djoin  = '\n' if hanging else '  '
+        newline = e.get('hanging') == 'true'
+        djoin  = '\n' if newline else '  '
         #
         compact = e.get('spacing') == 'compact'
         tjoin  = '\n' if compact else '\n\n'
         #
-        hang = 3
-        for dt in e.iterchildren('dt'):
-            dt._text = self.inner_text_renderer(dt)
-            l = len(dt._text)
-            if l > hang:
-                hang = l
-        if hang > 24:                   # XXX Somewhat arbitrary choice
-            hang = 24
-        kwargs['joiners'].update({
-            'dt':       joiner('', tjoin, 0, 0),
-            'dd':       joiner('', djoin, hang-1, 0),
-        })
+        indent = 3
+        if newline:
+            for dt in e.iterchildren('dt'):
+                dt._text = self.inner_text_renderer(dt)
+                l = len(dt._text)
+                if l > indent:
+                    indent = l+2
+            if indent > 16:                   # XXX Somewhat arbitrary choice
+                indent = 3
+        kwargs['joiners'] = {
+            None:       joiner('', tjoin, '', 0, 0),
+            'dt':       joiner('', tjoin, '', 0, 0),
+            'dd':       joiner('', djoin, '', indent, 0),
+        }
         # rendering
         text = ""
+        prev = None
         for c in e.getchildren():
-            text = self.join(text, c, width, **kwargs)
+            text = self.join(text, c, width, prev=prev, **kwargs)
+            prev = c
         return text
 
 
@@ -937,7 +1049,12 @@ class TextWriter:
     # 
     #    The ASCII equivalent of the author's email address.  This is only
     #    used if the email address has any internationalized components.
-
+    def render_email(self, e, width, **kwargs):
+        if self.options.rfc:
+            text = fill("EMail: %s"%e.text, width=width, **kwargs)
+        else:
+            text = fill("Email: %s"%e.text, width=width, **kwargs)
+        return text
 
     # 2.24.  <eref>
     # 
@@ -995,7 +1112,7 @@ class TextWriter:
         target = e.get('target')
         if not target:
             self.warn(e, "Expected the 'target' attribute to have a value, but found %s" % (etree.tostring(e), ))
-        link = "<%s>" % target if target else ''
+        link = "(%s)" % target if target else ''
         text = ' '.join([ t for t in [e.text, link] if t ])
         text += e.tail or ''
         return text
@@ -1080,15 +1197,15 @@ class TextWriter:
     #    Deprecated.
     def render_figure(self, e, width, **kwargs):
         kwargs['joiners'].update({
-            'name':     joiner('', ': ', 0, 0),
-            'artwork':  joiner('', '', 0, 0),
+            'name':     joiner('', ': ', '', 0, 0),
+            'artwork':  joiner('', '', '', 0, 0),
         })
         #
         pn = e.get('pn')
         num = pn.split('-')[1].capitalize()
         children = e.getchildren()
         title = "Figure %s" % (num, )
-        if children[0].tag == 'name':
+        if len(children) and children[0].tag == 'name':
             name = children[0]
             children = children[1:]
             title = self.join(title, name, width, **kwargs)
@@ -1324,7 +1441,7 @@ class TextWriter:
         #
         first_page_header = join_cols(left, right)
         first_page_header += '\n\n'
-        first_page_header += self.render_title(e.find('./title'), width, **kwargs)
+        first_page_header += self.render_title_front(e.find('./title'), width, **kwargs)
         return first_page_header
 
     def render_reference_front(self, e, width, **kwargs):
@@ -1460,7 +1577,7 @@ class TextWriter:
     def render_li(self, e, width, **kwargs):
         p = e.getparent()
         text = p._initial_text(e, p)
-        text = self.text_or_block_renderer(text, e, width, **kwargs)
+        text += self.text_or_block_renderer('', e, width, **kwargs).lstrip()
         return text
 
     def get_ol_li_initial_text(self, e, p):
@@ -1473,7 +1590,7 @@ class TextWriter:
         if p._bare:
             text = ''
         else:
-            text = p._symbol + ' ' 
+            text = p._symbol + '  '
         return text
 
     # 2.30.  <link>
@@ -1533,7 +1650,7 @@ class TextWriter:
     # 
     #    One or more <section> elements (Section 2.46)
     def render_middle(self, e, width, **kwargs):
-        kwargs['joiners'] = { None:       joiner('', '\n\n', 0, 0), } # default 
+        kwargs['joiners'] = { None:       joiner('', '\n\n', '', 0, 0), } # default 
         text = ""
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
@@ -1567,7 +1684,8 @@ class TextWriter:
     #    o  <xref> elements (Section 2.66)
     #@debug.trace
     def render_name(self, e, width, **kwargs):
-        return self.inner_text_renderer(e).strip()
+        hang=kwargs['joiners'][e.tag].hang
+        return fill(self.inner_text_renderer(e).strip(), width=width-hang, hang=hang)
 
     # 2.33.  <note>
     # 
@@ -1596,7 +1714,7 @@ class TextWriter:
     # 
     #        *  <ul> elements (Section 2.63)
     def render_note(self, e, width, **kwargs):
-        kwargs['joiners'].update({ None:       joiner('', '\n\n', 3, 0), })
+        kwargs['joiners'].update({ None:       joiner('', '\n\n', '', 3, 0), })
         text = ""
         if e[0].tag != 'name':
             text = "Note"
@@ -1757,11 +1875,12 @@ class TextWriter:
         ljoin  = '\n' if compact else '\n\n'
         #
         indent = len(e._format % (' '*utils.num_width(fchar, len(list(e))))) + len('  ')
-        e._padding = indent-1
+        e._padding = indent
         kwargs['joiners'].update({
-            None:   joiner('', ljoin, indent, 0),
-            't':    joiner('', ' ',   0,      indent),
-            'li':   joiner('', ljoin, 0,      0),
+            None:   joiner('', ljoin, '', indent, 0),
+            'li':   joiner('', ljoin, '', 0, 0),
+            't':    joiner('', ljoin, '', indent, 0),
+
         })
         #
         # rendering
@@ -1846,7 +1965,39 @@ class TextWriter:
     #    Or:
     # 
     #       One or more <postalLine> elements (Section 2.38)
-
+    def render_postal(self, e, width, **kwargs):
+        kwargs['joiners'] = {
+            None:           joiner('', '\n', '', 0, 0),
+        }
+        if e.find('./postalLine'):
+            text = ''
+            for c in e.getchildren():
+                text = self.join(text, c, width, **kwargs)
+        else:
+            lines = []
+            for street in e.findall('street'):
+                if street.text:
+                    lines.append(street.text)
+            cityline = []
+            city = e.find('city')
+            if city is not None and city.text:
+                cityline.append(city.text)
+            region = e.find('region')
+            if region is not None and region.text:
+                if len(cityline) > 0: cityline.append(', ');
+                cityline.append(region.text)
+            code = e.find('code')
+            if code is not None and code.text:
+                if len(cityline) > 0: cityline.append('  ');
+                cityline.append(code.text)
+            if len(cityline) > 0:
+                lines.append(''.join(cityline))
+            country = e.find('country')
+            if country is not None and country.text:
+                lines.append(country.text)
+            lines.append('')
+            text = '\n'.join(lines)
+        return text
 
     # 2.38.  <postalLine>
     # 
@@ -1904,7 +2055,9 @@ class TextWriter:
     #    o  <sup> elements (Section 2.52)
     # 
     #    o  <tt> elements (Section 2.62)
-
+    def render_refcontent(self, e, width, **kwargs):
+        text = fill(self.inner_text_renderer(e), width=width, **kwargs)
+        return text
 
     # 2.40.  <reference>
     # 
@@ -1950,6 +2103,48 @@ class TextWriter:
     # 2.40.3.  "target" Attribute
     # 
     #    Holds the URI for the reference.
+    def render_reference(self, e, width, **kwargs):
+        # rendering order: authors, title, seriesInfo, date, target, annotation
+        #p = e.getparent()
+        label = self.refname_mapping[e.get('anchor')]
+        label = ('[%s]' % label).ljust(11)
+        # ensure the desired ordering
+        authors = self.element('authors')
+        for a in e.iterdescendants('author'):
+            authors.append(a)
+        elements = [ authors, ]
+        for ctag in ('title', 'refcontent', 'seriesInfo', 'date', ):
+            for c in e.iterdescendants(ctag):
+                elements.append(c)
+        target = e.get('target')
+        if target:
+            t = self.element('t')
+            t.text = '<%s>' % target
+            elements.append(t)
+        kwargs['joiners'] = {
+            None:           joiner('', ', ', '', 0, 0),
+            'authors':      joiner('', '', '', 0, 0),
+            'annotation':   joiner('', '\n\n', '', 3, 0),
+        }
+        text = ''
+        width = width-11
+        for c in elements:
+            text = self.join(text, c, width, **kwargs)
+        text += '.'
+        text = fill(text, width=width, fix_sentence_endings=False, **kwargs).lstrip()
+
+        for ctag in ('annotation', ):
+            for c in e.iterdescendants(ctag):
+                text = self.join(text, c, width, **kwargs)
+
+        text = indent(text, 11, 0)
+        if len(label) > 11:
+            label += '\n'
+        else:
+            text = text.lstrip()
+        ref = label + text
+        return ref
+
 
 
     # 2.41.  <referencegroup>
@@ -2007,12 +2202,14 @@ class TextWriter:
     # 
     #    Deprecated.  Use <name> instead.
     def render_references(self, e, width, **kwargs):
+        hang = 11
         kwargs['joiners'].update({
-            None:           joiner('', '\n\n', 3, 0),
-            'name':         joiner('', '  ', 0, 0),
-            'references':   joiner('', '\n\n', 0, 0),
+            None:           joiner('', '\n\n', '', 3, 0),
+            'name':         joiner('', '  '  , '', 0, 0),
+            'reference':    joiner('', '\n\n', '', 3, 0),
+            'references':   joiner('', '\n\n', '', 0, 0),
         })
-        text = ""
+        text = ''
         pn = e.get('pn')
         text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
         for c in e.getchildren():
@@ -2481,15 +2678,18 @@ class TextWriter:
     #@debug.trace
     def render_section(self, e, width, **kwargs):
         kwargs['joiners'].update({
-            None:       joiner('', '\n\n', 3, 0), # default
-            't':        joiner('', '\n\n', 3, 0),
-            'name':     joiner('', '  ', 0, 0),
-            'section':  joiner('', '\n\n', 0, 0),
+            None:       joiner('', '\n\n', '', 3, 0), # default
+            't':        joiner('', '\n\n', '', 3, 0),
+            'name':     joiner('', '  ',   '', 0, 0),
+            'section':  joiner('', '\n\n', '', 0, 0),
         })
         text = ""
         pn = e.get('pn')
         if e.get('numbered') == 'true':
             text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
+        kwargs['joiners'].update({
+            'name':     joiner('', '  ', '', 0, len(text+'  ')),
+        })
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
         return text
@@ -2598,7 +2798,13 @@ class TextWriter:
     #    extension.  For Internet-Drafts, the value for this attribute should
     #    be "draft-ietf-somewg-someprotocol-07", not
     #    "draft-ietf-somewg-someprotocol-07.txt".
-
+    def render_seriesinfo(self, e, width, **kwargs):
+        name = e.get('name')
+        value = e.get('value')
+        if name == 'Internet-Draft':
+            return value + ' (work in progress)'
+        else:
+            return name + u'\u00A0' + value.replace('/', '/' + u'\u200B')
 
     # 2.48.  <sourcecode>
     # 
@@ -2871,6 +3077,314 @@ class TextWriter:
     # 2.54.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this table.
+    def render_table(self, e, width, **kwargs):
+
+        class Cell(object):
+            type    = b'None'
+            text    = None
+            wrapped = []
+            colspan = 1
+            rowspan = 1
+            width   = None
+            minwidth= None
+            height  = None
+            element = None
+            padding = 0
+
+        def show(cells, attr='', note=''):
+            debug.say('')
+            debug.say('%s %s:' % (attr, note))
+            for i in range(len(cells)):
+                row = [ (c.type[1], getattr(c, attr)) if attr else c for c in cells[i] ]
+                debug.say(str(row))
+
+        def array(rows, cols, init):
+            a = []
+            for i in range(rows):
+                a.append([])
+                for j in range(cols):
+                    if inspect.isclass(init):
+                        a[i].append(init())
+                    else:
+                        a[i].append(init)
+            return a
+
+        def intattr(e, name):
+            attr = e.get(name)
+            if attr.isdigit():
+                attr = int(attr)
+            else:
+                attr = 1
+            return attr
+
+        def get_dimensions(e):
+            cols = 0
+            rows = 0
+            # Find the dimensions of the table
+            for p in e.iterchildren(['thead', 'tbody', 'tfoot']):
+                for r in p.iterchildren('tr'):
+                    ccols = 0
+                    crows = 0
+                    extrarows = 0
+                    for c in r.iterchildren('td', 'th'):
+                        colspan = intattr(c, 'colspan')
+                        ccols += colspan
+                        rowspan = intattr(c, 'rowspan')
+                        crows = max(crows, rowspan)
+                    cols = max(cols, ccols)
+                    extrarows = max(extrarows, crows)
+                    extrarows -=1
+                    rows += 1
+            if extrarows > 0:
+                rows += extrarows
+            return rows, cols
+
+        def justify(cell, line):
+            align = cell.element.get('align')
+            width = cell.colwidth - cell.padding
+            if   align == 'left':
+                text = line.ljust(width)
+            elif align == 'center':
+                text = line.center(width)
+            elif align == 'right':
+                text = line.rjust(width)
+            if cell.padding > 1:
+                text = text + ' ' 
+            if cell.padding > 0:
+                text = ' ' + text
+            return text
+
+        def border(c, d):
+            border = {
+                '=': { '=':'=', '-':'=', '+':'+', },
+                '-': { '=':'=', '-':'-', '+':'+', },
+                '+': { '=':'+', '-':'+', '+':'+', '|':'+', },
+                '|': { '+':'+', '|':'|', },
+            }
+            if c in border and d in border[c]:
+                return border[c][d]
+            return c
+
+        def build_line(cells, i, cols, last=False):
+            line = ''
+            for j in range(cols):
+                k, l = cells[i][j].origin
+                # skip colspan cells
+                if k==i and l<j:
+                    continue
+                cell = cells[k][l]
+                part = cell.wrapped[cell.m]
+                if not last:
+                    cell.m += 1
+                if line:
+                    line = line[:-1] + border(line[-1], part[0]) + part[1:]
+                else:
+                    line = part
+            return line
+
+        # ----------------------------------------------------------------------
+        rows, cols = get_dimensions(e)
+        cells = array(rows, cols, Cell)
+
+        # ----------------------------------------------------------------------
+        # Iterate through tr and th/td elements, and annotate the cells array
+        # with rowspan, colspan, and owning element and its origin
+        i = 0
+        prev = e
+        for p in e.iterchildren(['thead', 'tbody', 'tfoot']):
+            # On transition from between header/body/footer, use '=' lines
+            if (prev.tag, p.tag) in [('thead', 'tbody'), ('tbody', 'tfoot'),]:
+                ii = i-1
+                for j in range(len(cells[ii])):
+                    k, l = cells[ii][j].origin
+                    cells[k][l].bot = '='
+            for r in list(p.iterchildren('tr')):
+                j = 0
+                for c in r.iterchildren('td', 'th'):
+                    # skip over cells belonging to an earlier row or column
+                    while j < len(cells[i]) and cells[i][j].element != None:
+                        j += 1
+                    #
+                    cell = cells[i][j]
+                    cell.colspan = intattr(c, 'colspan')
+                    cell.rowspan = intattr(c, 'rowspan')
+                    cell.text = self.inner_text_renderer(c).strip() or ''
+                    cell.minwidth = max([ len(w) for w in cell.text.split() ]) if cell.text else 0
+                    cell.type = p.tag
+                    cell.top = '-'
+                    cell.bot = '-'
+                    for k in range(i, i+cell.rowspan):
+                        for l in range(j, j+cell.colspan):
+                            cells[k][l].element = c
+                            cells[k][l].origin  = (i, j)
+                i += 1
+            prev = p
+
+                
+        #show(cells, 'origin')
+
+        # ----------------------------------------------------------------------
+        # Find the minimum column widths of regular cells, and total width
+        # per row.
+        totwidth  = []
+        for i in range(cols):
+            totwidth.append(sum([ c.minwidth for c in cells[i] if c.minwidth ])+cols+1)            
+            if totwidth[i] > width:
+                self.warn(r, "Total width of this table row exceeds available width (%s): %s" % (width, etree.tostring(r)))
+        #show(cells, 'minwidth')
+        #debug.pprint('totwidth')
+
+        # ----------------------------------------------------------------------
+        # Compute the adjusted cell widths; the same for all rows of each column
+        for j in range(cols):
+            colmax = 0
+            for i in range(rows):
+                cell = cells[i][j]
+                if cell.minwidth:
+                    w = cell.minwidth // cell.colspan
+                    if w > colmax:
+                        colmax = w
+            for i in range(rows):
+                cells[i][j].colwidth = colmax
+        #show(cells, 'colwidth', 'after adjusted cell widths')
+
+        # ----------------------------------------------------------------------
+        # Add padding if possible. Pad widest first.
+        reqwidth = sum([ c.colwidth for c in cells[0] ]) + cols + 1
+        if reqwidth > width:
+            self.warn(e, "Total table width (%s) exceeds available width (%s)" % (reqwidth, width))
+        excess = width - reqwidth
+        #
+        if excess > 0:
+            widths = [ (c.colwidth, i) for i, c in enumerate(cells[0]) ]
+            widths.sort()
+            widths.reverse()
+            for j in [ k for w, k in widths ]:
+                pad = min(2, excess)
+                excess -= pad
+                for i in range(rows):
+                    cells[i][j].colwidth += pad
+                    cells[i][j].padding   = pad
+        #show(cells, 'colwidth', 'after padding')
+
+        # ----------------------------------------------------------------------
+        # Make columns wider, if possible
+        while excess > 0:
+            maxpos = (None, None)
+            maxrows = 0
+            for i in range(rows):
+                for j in range(cols):
+                    cell = cells[i][j]
+                    if cell.origin == (i,j):
+                        w = sum([ cells[i][k].colwidth for k in range(j, j+cell.colspan)])+ cell.colspan-1 - cell.padding
+                        r = cell.rowspan
+                        # this is simplified, and doesn't always account for the
+                        # extra line from the missing border line in a rowspan cell:
+                        if cell.text:
+                            cell.wrapped = fill(cell.text, width=w, fix_sentence_endings=False).splitlines()
+                            cell.height = len(cell.wrapped)
+                            if maxrows < cell.height and cell.height > 1:
+                                maxrows = cell.height
+                                maxpos = (i, j)
+            # calculate a better width for the cell with the largest number
+            # of text rows
+            if maxpos != (None, None):
+                i, j = maxpos
+                cell = cells[i][j]
+                w = sum([ cells[i][k].colwidth for k in range(j, j+cell.colspan)])+ cell.colspan-1 - cell.padding
+                r = cell.rowspan
+                h = cell.height
+                for l in range(1, excess+1):
+                    lines = fill(cell.text, width=w+l, fix_sentence_endings=False).splitlines()
+                    n = len(lines)
+                    if n < h:
+                        cell.height = lines
+                        excess -= l
+                        c = h//r                        
+                        for k in range(rows):
+                            cells[k][j].colwidth += l
+                        break
+                else:
+                    break
+            else:
+                break
+        #show(cells, 'colwidth', 'after widening wide cells and re-wrapping lines')
+        #show(cells, 'height')
+        #show(cells, 'origin')
+
+        # ----------------------------------------------------------------------
+        # Normalize cell height and lines lists
+        #show(cells, 'wrapped', 'before height normalization')
+        #show(cells, 'rowspan', 'before height normalization')
+        for i in range(rows):
+            minspan = sys.maxsize
+            for j in range(cols):
+                cell = cells[i][j]
+                k, l = cell.origin
+                hspan = cell.rowspan+k-i if cell.rowspan else minspan
+                if hspan > 0 and hspan < minspan:
+                    minspan = hspan
+            maxlines = 0
+            for j in range(cols):
+                cell = cells[i][j]
+                k, l = cell.origin
+                hspan = cell.rowspan+k-i if cell.rowspan else minspan
+                lines = len(cell.wrapped) if cell.wrapped else 0
+                if hspan == minspan and lines > maxlines:
+                    maxlines = lines
+            for j in range(cols):
+                cells[i][j].lines = maxlines
+
+        # ----------------------------------------------------------------------
+        # Calculate total height for rowspan cells
+        for i in range(rows):
+            for j in range(cols):
+                cells[i][j].m = None
+                cells[i][j].height = None
+                k, l = cells[i][j].origin
+                cell = cells[k][l]
+                if cell.m is None:
+                    cell.m = 0
+                    cell.height = sum([ cells[n][l].lines for n in range(k, k+cell.rowspan)]) + cell.rowspan-1
+
+        # ----------------------------------------------------------------------
+        # Calculate total width for colspan cells
+        for i in range(rows):
+            for j in range(cols):
+                k, l = cells[i][j].origin
+                cell = cells[k][l]
+                if cell.origin == (i,j):
+                    cell.colwidth = sum([ cells[i][n].colwidth for n in range(j, j+cell.colspan)]) + cell.colspan-1
+
+        # ----------------------------------------------------------------------
+        # Add cell borders
+        for i in range(rows):
+            for j in range(cols):
+                cell = cells[i][j]
+                if cell.origin == (i, j):
+                    wrapped = (cell.wrapped + ['']*cell.height)[:cell.height]
+                    lines = (  [ '+' + cell.top*cell.colwidth + '+' ]
+                             + [ '|' + justify(cell, line) + '|' for line in wrapped ]
+                             + [ '+' + cell.bot*cell.colwidth + '+' ] )
+                    cell.wrapped = lines
+
+        #show(cells, 'lines', 'before assembly')
+        # ----------------------------------------------------------------------
+        # Emit combined cell content, line by line
+        lines = []
+        last = build_line(cells, 0, cols, last=True)
+        for i in range(rows):
+            for n in range(cells[i][0].lines+1):
+                lines.append(build_line(cells, i, cols))
+                if last:
+                    line = lines[-1]
+                    lines[-1] = ''.join(border(last[c], line[c]) for c in range(len(line)))
+                    last = None
+            last = build_line(cells, i, cols, last=True)
+        lines.append(last)
+        text = '\n'.join(lines)
+
+        return text
 
 
     # 2.55.  <tbody>
@@ -3109,6 +3623,14 @@ class TextWriter:
     # 
     #    Content model: only text content.
     def render_title(self, e, width, **kwargs):
+        r = e.getparent().getparent()   # <reference>
+        title = e.text.strip()
+        quote_title = r.get('quoteTitle')
+        if quote_title:
+            title = '"%s"' % title
+        return title
+
+    def render_title_front(self, e, width, **kwargs):
         pp = e.getparent().getparent()
         if self.options.rfc:
             return center(fill(e.text.strip(), width=width, **kwargs))
@@ -3117,6 +3639,10 @@ class TextWriter:
             if pp.tag == 'rfc':
                 doc_name = self.root.get('docName')
                 if doc_name:
+                    if '.' in doc_name:
+                        self.warn(self.root, "The 'docName' attribute of the <rfc/> element should not contain any filename extension: docName=\"draft-foo-bar-02\".")
+                    if not re.search('-\d\d$', doc_name):
+                        self.warn(self.root, "The 'docName' attribute of the <rfc/> element should have a revision number as the last component: docName=\"draft-foo-bar-02\".")
                     title += '\n'+doc_name.strip().center(width).rstrip()
             return title
 
@@ -3213,16 +3739,17 @@ class TextWriter:
         symbols = self.options.list_symbols
         e._symbol = ' ' if empty else symbols[depth%len(symbols)]
         #
-        hang = len(e._symbol)+2
+        indent = len(e._symbol)+2
         if e._bare:
             first = self.render(e[0], width, **kwargs)
             if first:
-                hang = len(first.split()[0])+2
+                indent = min(8, len(first.split()[0])+2)
+
         #
         kwargs['joiners'].update({
-            None:   joiner('', ljoin, 3, 0),
-            't':    joiner('', ' ', 0, hang),
-            'li':   joiner('', ljoin, 0, 0),
+            None:   joiner('', ljoin, '', indent, 0),
+            'li':   joiner('', ljoin, '', 0, 0),
+            't':    joiner('', ljoin, '', indent, 0),
         })
         #
         # rendering
@@ -3242,7 +3769,9 @@ class TextWriter:
     #    This element appears as a child element of <address> (Section 2.2).
     # 
     #    Content model: only text content.
-
+    def render_uri(self, e, width, **kwargs):
+        text = fill(u"URI:\u00a0\u00a0 %s"%e.text, width=width, **kwargs)
+        return text
 
     # 2.65.  <workgroup>
     # 
@@ -3282,11 +3811,11 @@ class TextWriter:
     # 
     #    Content model: only text content.
     def render_xref(self, e, width, **kwargs):
+        target = e.get('target')
         text = e.get('derivedContent')
         if text is None:
             self.die(e, "Found an <xref> without derivedContent: %s" % (etree.tostring(e),))
-        if e.tail:
-            text += e.tail
+        text += e.tail or ''
         return text
         
     # 2.66.1.  "format" Attribute
