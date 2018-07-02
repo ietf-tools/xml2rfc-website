@@ -759,8 +759,8 @@
        attribute xml:base { text }?,
        attribute xml:lang { text }?,
        attribute anchor { xsd:ID }?,
-       [ a:defaultValue = "0" ] attribute colspan { text }?,
-       [ a:defaultValue = "0" ] attribute rowspan { text }?,
+       [ a:defaultValue = "1" ] attribute colspan { text }?,
+       [ a:defaultValue = "1" ] attribute rowspan { text }?,
        [ a:defaultValue = "left" ]
        attribute align { "left" | "center" | "right" }?,
        ((artwork | dl | figure | ol | sourcecode | t | ul)+
@@ -784,8 +784,8 @@
        attribute xml:base { text }?,
        attribute xml:lang { text }?,
        attribute anchor { xsd:ID }?,
-       [ a:defaultValue = "0" ] attribute colspan { text }?,
-       [ a:defaultValue = "0" ] attribute rowspan { text }?,
+       [ a:defaultValue = "1" ] attribute colspan { text }?,
+       [ a:defaultValue = "1" ] attribute rowspan { text }?,
        [ a:defaultValue = "left" ]
        attribute align { "left" | "center" | "right" }?,
        ((artwork | dl | figure | ol | sourcecode | t | ul)+
