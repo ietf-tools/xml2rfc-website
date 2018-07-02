@@ -891,7 +891,7 @@
           </choice>
         </attribute>
         <optional>
-          <attribute name="hanging" a:defaultValue="false">
+          <attribute name="bare" a:defaultValue="false">
             <choice>
               <value>false</value>
               <value>true</value>
@@ -1706,10 +1706,10 @@
         </attribute>
       </optional>
       <optional>
-        <attribute name="colspan" a:defaultValue="0"/>
+        <attribute name="colspan" a:defaultValue="1"/>
       </optional>
       <optional>
-        <attribute name="rowspan" a:defaultValue="0"/>
+        <attribute name="rowspan" a:defaultValue="1"/>
       </optional>
       <optional>
         <attribute name="align" a:defaultValue="left">
@@ -1766,10 +1766,10 @@
         </attribute>
       </optional>
       <optional>
-        <attribute name="colspan" a:defaultValue="0"/>
+        <attribute name="colspan" a:defaultValue="1"/>
       </optional>
       <optional>
-        <attribute name="rowspan" a:defaultValue="0"/>
+        <attribute name="rowspan" a:defaultValue="1"/>
       </optional>
       <optional>
         <attribute name="align" a:defaultValue="left">
