@@ -482,7 +482,7 @@ class V2v3XmlWriter:
                     stripattr(e, [ attr ])
             # if we have <artwork> and either no anchor and no title, or suppress-title='true',
             # then promote the <artwork> and get rid of the <figure>
-        if artwork != None and ((not e.get('anchor') and not e.get('title')) or e.get('suppress-title') == 'true'):
+        if artwork != None and ((not e.get('anchor') and (not e.get('title')) or e.get('suppress-title') == 'true') and e.find('name')==None):
             pos = p.index(e)
             p.remove(e)
             p.insert(pos, artwork)
@@ -562,7 +562,7 @@ class V2v3XmlWriter:
 #         }
         front = e.find('./front')
         title = e.find('./front/title')
-        i = front.index(title) + 1
+        i = front.index(title) + 1 if title!=None else 0
         if 'category' in e.attrib and 'seriesNo' in e.attrib:
             attr = {
                 'name': e.get('category'),
@@ -575,7 +575,13 @@ class V2v3XmlWriter:
             if 'docName' in e.attrib:
                 e.insert(0, self.element('link', rel='convertedFrom', href="https://datatracker.ietf.org/doc/%s"%(e.get('docName'), )))
         elif 'docName' in e.attrib:
-            front.insert(i, self.element('seriesInfo', name="Internet-Draft", value=e.get('docName')))
+            value=e.get('docName')
+            if '.' in value:
+                log.warn("The 'docName' attribute of the <rfc/> element should not contain any filename extension: docName=\"draft-foo-bar-02\".")
+            if not re.search('-\d\d$', value):
+                log.note("The 'docName' attribute of the <rfc/> element should have a revision number as the last component when submitted: docName=\"draft-foo-bar-02\".")
+            front.insert(i, self.element('seriesInfo', name="Internet-Draft", value=value))
+
         stripattr(e, ['xi', ])
 
     # 2.47.  <seriesInfo>
@@ -716,6 +722,7 @@ class V2v3XmlWriter:
             tag = 'ul'
         elif style == 'hanging':
             tag = 'dl'
+            attribs["hanging"] = "false"
         elif style == 'numbers':
             tag = 'ol'
             attribs['type'] = nstyle if nstyle else '1'
@@ -749,6 +756,13 @@ class V2v3XmlWriter:
                 dt.text = t.get('hangText')
                 if not dt.text is None:
                     del t.attrib['hangText']
+                # Convert <vspace> at the start of hanging list text to
+                # attribute hanging='true' on <dl>
+                if not t.text and t[0].tag == 'vspace':
+                    blank_lines = t[0].get('blankLines', '')
+                    if blank_lines.isdigit() and int(blanklines) > 0:
+                        t.remove(t[0])
+                        l.set('hanging', 'true')
                 i = l.index(t)
                 l.insert(i, dt)
                 self.replace(t, 'dd')
