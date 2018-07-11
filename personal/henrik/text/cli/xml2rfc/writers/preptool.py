@@ -34,7 +34,7 @@ from xml2rfc import log
 from xml2rfc.boilerplate_rfc_7841 import boilerplate_rfc_status_of_memo
 from xml2rfc.boilerplate_id_guidelines import boilerplate_draft_status_of_memo
 from xml2rfc.boilerplate_tlp import boilerplate_tlp
-from xml2rfc.utils import build_dataurl, namespaces, find_duplicate_ids
+from xml2rfc.utils import build_dataurl, namespaces, find_duplicate_ids, extract_date, format_date
 from xml2rfc.writers.base import default_options
 from xml2rfc.writers.v2v3 import slugify
 from xml2rfc.scripts import get_scripts
@@ -266,6 +266,7 @@ class PrepToolWriter:
             './/boilerplate;insert_copyright_notice()', # 5.4.2.3.  "Copyright Notice" Insertion
             './/boilerplate//section',          # 5.2.7.  Section "toc" attribute
             './/reference;insert_target()',     # 5.4.3.  <reference> "target" Insertion
+            './/reference;sort_series_info()',  #         <reference> sort <seriesInfo>
             './/name;insert_slugified_name()',  # 5.4.4.  <name> Slugification
             './/references;sort()',             # 5.4.5.  <reference> Sorting
                                                 # 5.4.6.  "pn" Numbering
@@ -284,8 +285,9 @@ class PrepToolWriter:
             './/artwork',                       # 5.5.1.  <artwork> Processing
             './/sourcecode',                    # 5.5.2.  <sourcecode> Processing
             #
-            './/boilerplate;insert_table_of_contents()',
             './back;insert_index()',
+            './back;insert_author_address()',
+            './/boilerplate;insert_table_of_contents()',
             './/*[@removeInRFC="true"]',        # 5.6.1.  <note> Removal
             './/cref;removal()',                # 5.6.2.  <cref> Removal
                                                 # 5.6.3.  <link> Processing
@@ -534,11 +536,10 @@ class PrepToolWriter:
         group = e.get('group')
         start = e.get('start')
         if not start:
-            if group in self.ol_counts:
-                self.ol_counts[group] += 1
-            else:
+            if not group in self.ol_counts:
                 self.ol_counts[group] = 1
             e.set('start', str(self.ol_counts[group]))
+            self.ol_counts[group] += len(e)
 
     # 5.2.6.  Attribute Default Value Insertion
     # 
@@ -804,7 +805,7 @@ class PrepToolWriter:
         #
         section = self.element('section', numbered='false', toc='exclude')
         name = self.element('name')
-        name.text = "Status of this Memo"
+        name.text = "Status of This Memo"
         section.append(name)
         format_dict = {}
         format_dict['scheme'] = 'http' if self.date < self.boilerplate_https_date else 'https'
@@ -816,7 +817,7 @@ class PrepToolWriter:
             workgroup = self.root.find('./front/workgroup')
             #
             group = workgroup.text if workgroup != None else None
-            format_dict = { 'rfc_number': self.rfcnumber }
+            format_dict.update({ 'rfc_number': self.rfcnumber })
             if group:
                 format_dict['group_name'] = group
             #
@@ -838,6 +839,11 @@ class PrepToolWriter:
                     self.die(self.root, 'Unexpected attribute combination(%s): <rfc submissionType="%s" category="%s" consensus="%s">' % (exception, stream, category, consensus))
 
         else:
+            year, month, day = extract_date(self.root.find('./front/date'), self.date)
+            if not day:
+                day = self.date.day
+            exp = datetime.date(year=year, month=month, day=day) + datetime.timedelta(days=185)
+            format_dict['expiration_date'] = format_date(exp.year, exp.month, exp.day, self.options.legacy_date_format)
             for para in boilerplate_draft_status_of_memo:
                 t = self.element('t')
                 t.text = para.format(**format_dict).strip()
@@ -940,6 +946,27 @@ class PrepToolWriter:
                     else:
                         self.err(c, 'Expected a value= attribute value for <seriesInfo name="%s">, but found none' % (series_name, ))
 
+    def reference_sort_series_info(self, e, p):
+        def series_order(s):
+            name = s.get('name')
+            series_order = { 'BCP': 1, 'RFC': 2, 'DOI': 3, }
+            if name in series_order:
+                return series_order[name]
+            else:
+                return sys.maxsize
+        front = e.find('front')
+        series_info = front.xpath('./seriesInfo')
+        series_info.sort(key=lambda x: series_order(x) )
+        pos = sys.maxsize
+        for s in series_info:
+            i = front.index(s)
+            if i < pos:
+                pos = i
+            front.remove(s)
+        for s in series_info:
+            front.insert(pos, s)
+            pos += 1
+
     # 
     # 5.4.4.  <name> Slugification
     # 
@@ -963,7 +990,7 @@ class PrepToolWriter:
     def references_sort(self, e, p):
         global refname_mapping
         children = e.xpath('./reference')
-        children.sort(key=lambda x: refname_mapping[x.get('anchor')])
+        children.sort(key=lambda x: refname_mapping[x.get('anchor')].upper() )
         for c in children:
             e.remove(c)
         e[-1].tail = ''
@@ -1037,7 +1064,7 @@ class PrepToolWriter:
         section_number = self.back_section_number[:]
         section_number[0] = chr(0x60+section_number[0])
         if level == 0:
-            e.set('pn', '%s-appendix-%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in section_number ]), ))
+            e.set('pn', '%s-appendix.%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in section_number ]), ))
         else:
             e.set('pn', '%s-%s' % (pnprefix[e.tag], '.'.join([ str(n) for n in section_number ]), ))
         self.prev_section_level = level
@@ -1158,20 +1185,22 @@ class PrepToolWriter:
                 self.die(e, "Found no element to match the <xref> target attribute '%s'" % (target, ))
             t.set('anchor', t.get('pn'))
         #
-        if e.text:
+        if e.text and e.text.strip():
             content = e.text.strip()
         else:
             pn = t.get('pn')
             #
             format = e.get('format', 'default')
             if   format == 'counter':
-                if not t.tag in ['section', 'table', 'figure', 'li']:
+                if not t.tag in ['section', 'table', 'figure', 'li', 'references', ]:
                     self.die(e, "Using <xref> format='counter' with a <%s> target is not supported" % (t.tag, ))
                 if t.tag == 'li':
                     parent = t.getparent()
                     if not parent.tag == 'ol':
                         self.die(e, "Using <xref> format='counter' with a <%s><%s> target is not supported" %(parent.tag, t.tag, ))
                 type, num = split_pn(t, pn)
+                if num.startswith('appendix'):
+                    num = num.replace('.', ' ', 1).title()
                 content = num
             elif format == 'default':
                 if t.tag in [ 'reference', 'referencegroup' ]:
@@ -1494,7 +1523,10 @@ class PrepToolWriter:
             name = s.find('./name')
             if name is None:
                 self.die(s, "No name entry found for section, can't continue: %s" % (etree.tostring(s)))
-            num = s.get('pn').split('-', 1)[1].replace('-', ' ').title()
+            numbered = s.get('numbered')=='true' or s.tag=='references'
+            num = s.get('pn').split('-', 1)[1].replace('-', ' ').title() if numbered else ''
+            if num.startswith('Appendix'):
+                num = num.replace('.', ' ', 1)
             #
             t = self.element('t')
             anchor = s.get('anchor')
@@ -1504,10 +1536,10 @@ class PrepToolWriter:
                     self.die(s, "No anchor and no pn entry found for section, can't continue: %s" % (etree.tostring(s)))
                 s.set('anchor', anchor)
             xref = self.element('xref', target=anchor, format='counter', derivedContent=num)
-            xref.tail = '.'+self.spacer
+            xref.tail = ('.'+self.spacer) if num else ''
             t.append(xref)
             if name.text:
-                xref.tail += ' '+name.text
+                xref.tail += name.text
             for c in name:
                 cc = copy.deepcopy(c)
                 if 'anchor' in cc.keys():
@@ -1517,13 +1549,13 @@ class PrepToolWriter:
             return t
         def toc_entries(e):
             toc = e.get('toc')
-            if toc == 'include' or e.tag in ['rfc', 'front', 'middle', 'back']:
+            if toc == 'include' or e.tag in ['rfc', 'front', 'middle', 'back', 'references', ]:
                 sub = []
                 for c in e:
                     l = toc_entries(c)
                     if l:
                         sub += l
-                if e.tag == 'section':
+                if e.tag in ['section', 'references', ]:
                     li = self.element('li')
                     li.append(toc_entry_t(e))
                     if sub:
@@ -1627,6 +1659,22 @@ class PrepToolWriter:
             #
             self.back_section_add_number(index, e)
             self.paragraph_add_numbers(index, e)
+
+    def back_insert_author_address(self, e, p):
+        if self.prepped:
+            return
+        authors = self.root.findall('./front/author')
+        s = self.element('section', toc='include', numbered='false', pn='authors-addresses', anchor='authors-addresses')
+        n = self.element('name')
+        if len(authors) > 1:
+            n.text = "Authors' Addresses"
+        else:
+            n.text = "Author's Address"
+        s.append(n)
+        for a in authors:
+            s.append(copy.copy(a))
+        back = self.root.find('./back')
+        back.append(s)
 
     # 5.6.  RFC Production Mode Cleanup
     # 
