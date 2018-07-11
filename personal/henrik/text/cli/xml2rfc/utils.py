@@ -127,7 +127,7 @@ class TextWrapper(textwrap.TextWrapper):
 
         # Maybe remove double (and more) spaces, except when they might be between sentences
         if fix_doublespace:
-            text = re.sub("([^].!?])  +", r"\1 ", text)
+            text = re.sub("([^.!?])  +", r"\1 ", text)
             text = re.sub("([.!?])   +", r"\1  ", text)
 
         # prevent breaking "Section N.N" and "Appendix X.X"
@@ -305,6 +305,10 @@ def num_width(type, num):
         return int(math.log(num, 26))+1
     elif type in ['1','d',]:
         return int(math.log(num, 10))+1
+    elif type in ['o','O',]:
+        return int(math.log(num, 8))+1
+    elif type in ['x','X',]:
+        return int(math.log(num, 16))+1
     elif type in ['i','I',]:
         m = len(roman_max_widths)
         if num > m:
@@ -659,4 +663,41 @@ def hastext(e):
     head = [ e.text ] if e.text and e.text.strip() else []
     items = head + [ c for c in e.iterchildren() if not (isblock(c) or iscomment(c))] + [ c.tail for c in e.iterchildren() if c.tail and c.tail.strip() ]
     return items
+
+def extract_date(e, today):
+    day = e.get('day')
+    month = e.get('month')
+    year = e.get('year', str(today.year))
+    #
+    if not year.isdigit():
+        xml2rfc.log.warn(e, "Expected a numeric year, but found '%s'" % year)
+        year = today.year
+    year = int(year)
+    if not month:
+        if year == today.year:
+            month = today.month
+    else:
+        if not month.isdigit():
+            month = normalize_month(month)
+        month = int(month)
+    if day:
+        if not day.isdigit():
+            xml2rfc.log.warn(e, "Expected a numeric day, but found '%s'" % day)
+            day = today.day
+        day = int(day)
+    return year, month, day
+
+def format_date(year, month, day, legacy):
+    if month:
+        month = calendar.month_name[month]
+        if day:
+            if legacy:
+                date = '%s %s, %s' % (month, day, year)
+            else:
+                date = '%s %s %s' % (day, month, year)
+        else:
+            date = '%s %s' % (month, year)
+    else:
+        date = '%s' % year
+    return date
 
