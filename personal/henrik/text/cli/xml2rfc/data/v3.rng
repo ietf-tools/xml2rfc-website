@@ -619,6 +619,7 @@
         <choice>
           <ref name="artwork"/>
           <ref name="aside"/>
+          <ref name="author"/>
           <ref name="blockquote"/>
           <ref name="dl"/>
           <ref name="figure"/>
