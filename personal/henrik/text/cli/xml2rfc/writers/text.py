@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function, division
 
-import calendar
 import copy
 import datetime
 import inspect
@@ -56,16 +55,33 @@ def fill(*args, **kwargs):
     result = wrapper.fill(*args, initial=initial, subsequent_indent=subsequent_indent, **kwargs)
     return result
 
-def center(text, width=None, **kwargs):
+def center(text, width, **kwargs):
+    "Fold and center the given text"
     # avoid centered text extending all the way to the margins
-    if width is None:
-        width = 72
     kwargs['width'] = width-4
     lines = wrapper.wrap(text, **kwargs)
     for i in range(len(lines)):
         lines[i] = lines[i].center(width).rstrip()
-    text = '\n'.join(lines).replace(u'\u00A0', ' ')
+    text = '\n'.join(lines).replace('\u00A0', ' ')
     return text
+
+def align(text, how, width):
+    "Align the given text block left, center, or right, as a block"
+    if not text:
+        return text
+    if   how == 'left':
+        return text
+    lines = text.splitlines()
+    w = max( len(l) for l in lines )
+    if w >= width:
+        return text
+    shift = width - w
+    if how == 'center':
+        return '\n'.join( ' '*(shift//2)+l for l in lines )
+    elif how == 'right':
+        return '\n'.join( ' '*shift+l for l in lines )
+    else:
+        return text
 
 def minwidth(text):
     words = text.split()
@@ -133,16 +149,24 @@ class TextWriter:
         refs = self.schema.xpath("/x:grammar/x:define/x:element[@name='%s']//x:ref" % tag, namespaces=utils.namespaces)
         names = set([ r.get('name') for r in refs ])
         return names
-
     def write(self, filename):
         """ Public method to write the XML document to a file """
         joiners = {
             None:   joiner('', '\n\n', '', 0, 0),
             #'':     joiner('', ' ', '', 0, 0),
         }
+        # get rid of comments so we can ignore them in the rest of the code
+        for c in self.tree.xpath('.//comment()'):
+            p = c.getparent()
+            p.remove(c)
         text = self.render(self.root, width=72, joiners=joiners)
         if not text.endswith('\n'):
             text += '\n'
+        # Replace some code points whose utility has ended
+        text = text.replace(u'\u00A0', u' ')
+        text = text.replace(u'\u2011', u'-')
+        text = text.replace(u'\u200B', u'')
+
         if self.errors:
             log.write("Not creating output file due to errors (see above)")
             return
@@ -155,8 +179,6 @@ class TextWriter:
             log.write('Created file', filename)
 
     def render(self, e, width, **kw):
-        if isinstance(e, etree._Comment):
-            return ''
         kwargs = copy.deepcopy(kw)
         func_name = "render_%s" % (e.tag.lower(),)
         func = getattr(self, func_name, self.default_renderer)
@@ -174,7 +196,6 @@ class TextWriter:
         Render element e, then format and join it to text using the
         appropriate settings in joiners.
         '''
-        in_list = list(e.iterancestors('ul'))
         assert 'joiners' in kwargs
         joiners = kwargs['joiners']
         j = joiners[e.tag] if e.tag in joiners else joiners[None]
@@ -203,8 +224,12 @@ class TextWriter:
             text  = j.init + itext
         return text
 
-    def element(self, tag):
-        return etree.Element(tag)
+    def element(self, tag, line=None, **attribs):
+        e = etree.Element(tag, **attribs)
+        if line:
+            e.sourceline = line
+        return e
+
 
     def get_initials(self, author):
         """author is an rfc2629 author element.  Return the author initials,
@@ -250,6 +275,7 @@ class TextWriter:
         text = e.text or ''
         for c in e.getchildren():
             text += self.render(c, width, **kwargs)
+            
         return text.strip()
     
 #     def text_renderer(self, e, width, **kwargs):
@@ -299,6 +325,12 @@ class TextWriter:
     #    Provides address information for the author.
     # 
     #    This element appears as a child element of <author> (Section 2.7).
+    def render_address(self, e, width, **kwargs):
+        kwargs['joiners'] = { None:       joiner('', '\n', '', 0, 0), }
+        text = ""
+        for c in e.getchildren():
+            text = self.join(text, c, width, **kwargs)
+        return text
 
     # 2.3.  <annotation>
     # 
@@ -376,11 +408,11 @@ class TextWriter:
     #    See Section 5 for a description of how to deal with issues of using
     #    "&" and "<" characters in artwork.
     def render_artwork(self, e, width, **kwargs):
-        text = e.text.expandtabs() or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
+        text = (e.text and e.text.expandtabs()) or "(Artwork only available as %s: <%s>)" % (e.get('type'), e.get('originalSrc'))
         text += e.tail or ''
         text = text.strip('\n')
         text = '\n'.join( [ l.rstrip() for l in text.splitlines() ] )
-        return text
+        return align(text, e.get('align', 'left'), width)
 
     # 2.5.1.  "align" Attribute
     # 
@@ -557,6 +589,41 @@ class TextWriter:
     #    The author's surname, to be used in conjunction with the separately
     #    specified initials.  It usually appears on the front page, in
     #    footers, and in references.
+    def render_author(self, e, width, **kwargs):
+        """
+        Render one author entry for the Authors' Addresses section.
+        """
+        kwargs['joiners'] = {
+            None:       joiner('', '\n', '', 0, 0),  # default 
+        }
+        text = self.render_author_name(e, width, **kwargs)
+        for c in e.iterchildren('address'):
+            text = self.join(text, c, width, **kwargs)
+        text = text.rstrip() + '\n\n'
+        return text
+
+    def render_author_name(self, e, width, **kwargs):
+        text = ''
+        organization = self.render_organization(e.find('organization'), width, **kwargs)
+        fullname = e.attrib.get('fullname', '')
+        if not fullname:
+            surname = e.attrib.get('surname', '')
+            if surname:
+                initials = self.get_initials(e)
+                fullname = '%s %s' % (initials, fullname)
+        if fullname:
+            text = fullname
+            if e.attrib.get('role', '') == 'editor':
+                text += ' (editor)'
+            if organization:
+                text += '\n'+ organization
+        elif organization:
+            # Use organization instead of name
+            text = organization
+        else:
+            text = ''
+        return text
+
     def render_author_front(self, e, **kwargs):
         ascii_initials = e.get('asciiInitials', '').strip()
         if ascii_initials and not ascii_initials.endswith('.'):
@@ -609,10 +676,10 @@ class TextWriter:
         buf = []
         authors = e.getchildren()
         for i, author in enumerate(authors):
-            organization = author.find('organization')
-            surname = author.attrib.get('surname', '')
             if i == len(authors) - 1 and len(authors) > 1:
                 buf.append('and ')
+            organization = author.find('organization')
+            surname = author.attrib.get('surname', '')
             if surname:
                 initials = self.get_initials(author)
                 if i == len(authors) - 1 and len(authors) > 1:
@@ -649,17 +716,6 @@ class TextWriter:
         text = ""
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
-        authors = self.root.findall('./front/author')
-        s = self.element('section')
-        n = self.element('name')
-        if len(authors) > 1:
-            n.text = "Authors' Addresses"
-        else:
-            n.text = "Author's Address"
-        s.append(n)
-        for a in authors:
-            s.append(a)
-        text = self.join(text, s, width, **kwargs)
         return text
 
 
@@ -856,29 +912,8 @@ class TextWriter:
     def render_date(self, e, width, **kwargs):
         #pp = e.getparent().getparent()
         #if pp.tag == 'rfc':
-        today = self.date
-        day = e.get('day')
-        month = e.get('month')
-        year = e.get('year')
-        #
-        if not month:
-            if year == today.year:
-                month = today.month
-        else:
-            if not month.isdigit():
-                month = utils.normalize_month(month)
-            month = int(month)
-        if month:
-            month = calendar.month_name[month]
-            if day:
-                if self.options.legacy_date_format:
-                    date = '%s %s, %s' % (month, day, year)
-                else:
-                    date = '%s %s %s' % (day, month, year)
-            else:
-                date = '%s %s' % (month, year)
-        else:
-            date += '%s' % year
+        year, month, day = utils.extract_date(e, self.date)
+        date = utils.format_date(year, month, day, self.options.legacy_date_format)
         return date
 
 
@@ -893,8 +928,11 @@ class TextWriter:
     #    Document-wide unique identifier for this definition.
     def render_dd(self, e, width, **kwargs):
         dt = kwargs.pop('prev')
+        newline = kwargs.pop('newline')
         term = self.render_dt(dt, width, **kwargs)
-        #kwargs['first'] = len(term)+len(kwargs['joiners']['dd'].join)
+        term_width = max( len(l) for l in term.splitlines() ) + len(kwargs['joiners']['dd'].join)
+        ind = term_width - kwargs['joiners']['dd'].indent
+        kwargs['first'] = 0 if newline else ind
         text = self.text_or_block_renderer('', e, width, **kwargs).lstrip()
         return text
 
@@ -985,13 +1023,16 @@ class TextWriter:
         tjoin  = '\n' if compact else '\n\n'
         #
         indent = 3
+        for dt in e.iterchildren('dt'):
+            dt._text = self.inner_text_renderer(dt)
+            l = len(dt._text)
+            if l+2 > indent:
+                indent = l+2
         if newline:
-            for dt in e.iterchildren('dt'):
-                dt._text = self.inner_text_renderer(dt)
-                l = len(dt._text)
-                if l > indent:
-                    indent = l+2
-            if indent > 16:                   # XXX Somewhat arbitrary choice
+            if indent > 15:                   # XXX Somewhat arbitrary choice
+                indent = 3
+        else:
+            if indent > 24:                   # XXX Somewhat arbitrary choice
                 indent = 3
         kwargs['joiners'] = {
             None:       joiner('', tjoin, '', 0, 0),
@@ -1002,7 +1043,7 @@ class TextWriter:
         text = ""
         prev = None
         for c in e.getchildren():
-            text = self.join(text, c, width, prev=prev, **kwargs)
+            text = self.join(text, c, width, prev=prev, newline=newline, **kwargs)
             prev = c
         return text
 
@@ -1017,8 +1058,13 @@ class TextWriter:
     # 
     #    Document-wide unique identifier for this term.
     def render_dt(self, e, width, **kwargs):
+        kwargs.pop('newline', False)
+        indent = kwargs['joiners']['dd'].indent
+        join   = len(kwargs['joiners']['dd'].join)
         width -= 24
         text = fill(self.inner_text_renderer(e), width=width, **kwargs)
+        if len(text) < indent:
+            text = text+' '*max(0, indent-join-len(text))
         return text
 
 
@@ -1050,10 +1096,12 @@ class TextWriter:
     #    The ASCII equivalent of the author's email address.  This is only
     #    used if the email address has any internationalized components.
     def render_email(self, e, width, **kwargs):
-        if self.options.rfc:
-            text = fill("EMail: %s"%e.text, width=width, **kwargs)
-        else:
-            text = fill("Email: %s"%e.text, width=width, **kwargs)
+        text = ''
+        if e.text:
+            if self.options.rfc:
+                text = fill("EMail: %s"%e.text, width=width, **kwargs)
+            else:
+                text = fill("Email: %s"%e.text, width=width, **kwargs)
         return text
 
     # 2.24.  <eref>
@@ -1265,7 +1313,7 @@ class TextWriter:
                 assert len(l)+len(r)<70
                 w = 72-len(l)-len(r)
                 lines.append(l+' '*w+r)
-            return '\n'.join(lines)+'\n'
+            return '\n'.join(lines).rstrip()+'\n'
         #
         def wrap(label, items, suffix=''):
             wrapper = textwrap.TextWrapper(width=48, subsequent_indent=' '*len('%s: '%label))
@@ -1385,12 +1433,17 @@ class TextWriter:
                 #
                 if category:
                     if category in strings.category:
-                        left.append('Intended Status: %s' % (strings.category[category], ))
+                        left.append('Intended status: %s' % (strings.category[category], ))
                     else:
                         self.warn(self.root, "Expected a known category, one of %s, but found '%s'" % (','.join(strings.category.keys()), category, ))
                 else:
                     self.warn(self.root, "Expected a category, one of %s, but found none" % (','.join(strings.category.keys()), ))
                 #
+                year, month, day = utils.extract_date(self.root.find('./front/date'), self.date)
+                if not day:
+                    day = self.date.day
+                exp = datetime.date(year=year, month=month, day=day) + datetime.timedelta(days=185)
+                left.append('Expires: %s' % utils.format_date(exp.year, exp.month, exp.day, self.options.legacy_date_format))
             return left
         #
         def get_right(front):
@@ -1843,6 +1896,10 @@ class TextWriter:
             'd':    lambda n: tuple([n]),
             'i':    lambda n: tuple([utils.int2roman(n)]),
             'I':    lambda n: tuple([utils.int2roman(n).upper()]),
+            'o':    lambda n: tuple(['%o'%n]),
+            'O':    lambda n: tuple(['%O'%n]),
+            'x':    lambda n: tuple(['%x'%n]),
+            'X':    lambda n: tuple(['%X'%n]),
         }
         #
         start = e.get('start')
@@ -1857,14 +1914,15 @@ class TextWriter:
             type = '1'
         e._type = type
         if len(type) > 1:
-            formspec = re.search('%([cCdiI])', type)
+            formspec = re.search('%([cCdiIoOxX])', type)
             if formspec:
                 fchar = formspec.group(1)
                 fspec = formspec.group(0)
                 e._format = type.replace(fspec, '%s')
             else:
-                fchar = None
-                e._format = type
+                self.err(e, "Expected a <ol> format specification of '%%' followed by upper- or lower-case of one of c,d,i,o,x; but found '%s'" % (type, ))
+                fchar = 'd'
+                e._format = '%s'
         else:
             fchar = type
             e._format = '%s.'
@@ -1922,6 +1980,16 @@ class TextWriter:
                 org += ' (%s)' % ascii.strip()
         return org
 
+    def render_organization(self, e, width, **kwargs):
+        org = e.text or ''
+        org = org.strip()
+        if org:
+            ascii = e.get('ascii')
+            if ascii:
+                org += ' (%s)' % ascii.strip()
+        text = fill(org, width=width, **kwargs)
+        return text
+
     # 2.36.  <phone>
     # 
     #    Represents a phone number.
@@ -1934,7 +2002,9 @@ class TextWriter:
     #    This element appears as a child element of <address> (Section 2.2).
     # 
     #    Content model: only text content.
-
+    def render_phone(self, e, width, **kwargs):
+        text = fill("Phone: %s"%e.text, width=width, **kwargs) if e.text else ''
+        return text
 
     # 2.37.  <postal>
     # 
@@ -1966,9 +2036,7 @@ class TextWriter:
     # 
     #       One or more <postalLine> elements (Section 2.38)
     def render_postal(self, e, width, **kwargs):
-        kwargs['joiners'] = {
-            None:           joiner('', '\n', '', 0, 0),
-        }
+        kwargs['joiners'] = { None: joiner('', '\n', '', 0, 0), }
         if e.find('./postalLine'):
             text = ''
             for c in e.getchildren():
@@ -1995,8 +2063,8 @@ class TextWriter:
             country = e.find('country')
             if country is not None and country.text:
                 lines.append(country.text)
-            lines.append('')
             text = '\n'.join(lines)
+        text = text.strip() + '\n\n'
         return text
 
     # 2.38.  <postalLine>
@@ -2202,7 +2270,6 @@ class TextWriter:
     # 
     #    Deprecated.  Use <name> instead.
     def render_references(self, e, width, **kwargs):
-        hang = 11
         kwargs['joiners'].update({
             None:           joiner('', '\n\n', '', 3, 0),
             'name':         joiner('', '  '  , '', 0, 0),
@@ -2682,13 +2749,16 @@ class TextWriter:
             't':        joiner('', '\n\n', '', 3, 0),
             'name':     joiner('', '  ',   '', 0, 0),
             'section':  joiner('', '\n\n', '', 0, 0),
+            'artwork':  joiner('', '\n\n', '', 3, 0),
         })
         text = ""
         pn = e.get('pn')
         if e.get('numbered') == 'true':
             text = pn.split('-',1)[1].replace('-', ' ').title() +'.'
+            if text.startswith('Appendix'):
+                text = text.replace('.', ' ', 1)
         kwargs['joiners'].update({
-            'name':     joiner('', '  ', '', 0, len(text+'  ')),
+            'name':     joiner('', '  ', '', 0, 0),
         })
         for c in e.getchildren():
             text = self.join(text, c, width, **kwargs)
@@ -2804,7 +2874,7 @@ class TextWriter:
         if name == 'Internet-Draft':
             return value + ' (work in progress)'
         else:
-            return name + u'\u00A0' + value.replace('/', '/' + u'\u200B')
+            return name + '\u00A0' + value.replace('/', '/' + '\u200B')
 
     # 2.48.  <sourcecode>
     # 
@@ -2906,6 +2976,17 @@ class TextWriter:
     #    updated over time.  Thus, a consumer of v3 XML should not cause a
     #    failure when it encounters an unexpected type or no type is
     #    specified.
+    def render_sourcecode(self, e, width, **kwargs):
+        text = "<CODE BEGINS>"
+        file = e.get('name')
+        if file:
+            text += ' file "%s"' % file
+        text += '\n'
+        text += self.render_artwork(e, width, **kwargs)
+        text += '\n'
+        text += '<CODE ENDS>'
+        return text
+        
 
 
     # 2.49.  <street>
@@ -3077,7 +3158,7 @@ class TextWriter:
     # 2.54.1.  "anchor" Attribute
     # 
     #    Document-wide unique identifier for this table.
-    def render_table(self, e, width, **kwargs):
+    def build_table(self, e, width, **kwargs):
 
         class Cell(object):
             type    = b'None'
@@ -3228,7 +3309,7 @@ class TextWriter:
         # per row.
         totwidth  = []
         for i in range(cols):
-            totwidth.append(sum([ c.minwidth for c in cells[i] if c.minwidth ])+cols+1)            
+            totwidth.append(sum([ c.minwidth for c in cells[0] if c.minwidth ])+cols+1)
             if totwidth[i] > width:
                 self.warn(r, "Total width of this table row exceeds available width (%s): %s" % (width, etree.tostring(r)))
         #show(cells, 'minwidth')
@@ -3246,6 +3327,7 @@ class TextWriter:
                         colmax = w
             for i in range(rows):
                 cells[i][j].colwidth = colmax
+        del w
         #show(cells, 'colwidth', 'after adjusted cell widths')
 
         # ----------------------------------------------------------------------
@@ -3296,8 +3378,7 @@ class TextWriter:
                 h = cell.height
                 for l in range(1, excess+1):
                     lines = fill(cell.text, width=w+l, fix_sentence_endings=False).splitlines()
-                    n = len(lines)
-                    if n < h:
+                    if len(lines) < h:
                         cell.height = lines
                         excess -= l
                         c = h//r                        
@@ -3308,6 +3389,7 @@ class TextWriter:
                     break
             else:
                 break
+
         #show(cells, 'colwidth', 'after widening wide cells and re-wrapping lines')
         #show(cells, 'height')
         #show(cells, 'origin')
@@ -3385,6 +3467,25 @@ class TextWriter:
         text = '\n'.join(lines)
 
         return text
+
+    def render_table(self, e, width, **kwargs):
+        kwargs['joiners'].update({
+            'name':     joiner('', ': ', '', 0, 0),
+        })
+        #
+        pn = e.get('pn')
+        num = pn.split('-')[1].capitalize()
+        children = e.getchildren()
+        title = "Table %s" % (num, )
+        if len(children) and children[0].tag == 'name':
+            name = children[0]
+            children = children[1:]
+            title = self.join(title, name, width, **kwargs)
+        text = self.build_table(e, width, **kwargs)
+        text = align(text, e.get('align', 'left'), width)
+        text += '\n\n'+center(title, width).rstrip()
+        return text
+
 
 
     # 2.55.  <tbody>
@@ -3633,9 +3734,9 @@ class TextWriter:
     def render_title_front(self, e, width, **kwargs):
         pp = e.getparent().getparent()
         if self.options.rfc:
-            return center(fill(e.text.strip(), width=width, **kwargs))
+            return center(fill(e.text.strip(), width=width, **kwargs), width)
         else:
-            title = center(fill(e.text.strip(), width=width, **kwargs))
+            title = center(fill(e.text.strip(), width=width, **kwargs), width)
             if pp.tag == 'rfc':
                 doc_name = self.root.get('docName')
                 if doc_name:
@@ -3770,7 +3871,7 @@ class TextWriter:
     # 
     #    Content model: only text content.
     def render_uri(self, e, width, **kwargs):
-        text = fill(u"URI:\u00a0\u00a0 %s"%e.text, width=width, **kwargs)
+        text = fill("URI:\u00a0\u00a0 %s"%e.text, width=width, **kwargs) if e.text else ''
         return text
 
     # 2.65.  <workgroup>
@@ -3812,10 +3913,37 @@ class TextWriter:
     #    Content model: only text content.
     def render_xref(self, e, width, **kwargs):
         target = e.get('target')
-        text = e.get('derivedContent')
-        if text is None:
+        link   = e.get('derivedContent')
+        text   = e.text or ''
+        format = e.get('format')
+        if link is None:
             self.die(e, "Found an <xref> without derivedContent: %s" % (etree.tostring(e),))
-        text += e.tail or ''
+        if   format == 'counter':
+            text = link
+        elif format == 'default':
+            if target in self.refname_mapping:
+                ref = "[%s]" % self.refname_mapping[target]
+                if text != ref:
+                    if text:
+                        text += ' '
+                    text += ref
+            else:
+                t = self.root.find('.//*[@anchor="%s"]'%(target, ))
+                pn = t.get('pn')
+                type, num = pn.split('-')[:2]
+                ref = '%s %s'%(type.capitalize(), num)
+                if text != ref:
+                    if text:
+                        text += ' (%s)'%ref
+                    else:
+                        text = ref
+        elif format == 'title':
+            text = link
+        else:
+            self.die(e, "Unexpected <xref> format: '%s'.  Expected 'counter', 'title', or 'default'" % (format, ))
+
+        text += (e.tail or '')
+
         return text
         
     # 2.66.1.  "format" Attribute
