@@ -274,6 +274,7 @@
        name?,
        (artwork
         | aside
+	| author
         | blockquote
         | dl
         | figure
