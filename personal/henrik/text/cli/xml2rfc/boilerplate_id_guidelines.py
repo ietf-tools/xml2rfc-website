@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-# The following text entries, were taken from
+# The following text entries were taken from
 # https://www.ietf.org/ietf-ftp/1id-guidelines.txt
 
 boilerplate_draft_status_of_memo = [
@@ -14,12 +14,15 @@ boilerplate_draft_status_of_memo = [
         Internet-Drafts are working documents of the Internet Engineering Task
         Force (IETF). Note that other groups may also distribute working
         documents as Internet-Drafts. The list of current Internet-Drafts is
-        at {scheme}://datatracker.ietf.org/drafts/current.
+        at {scheme}://datatracker.ietf.org/drafts/current/.
         """,
         """
         Internet-Drafts are draft documents valid for a maximum of six months
         and may be updated, replaced, or obsoleted by other documents at any
         time. It is inappropriate to use Internet-Drafts as reference
         material or to cite them other than as "work in progress."
+        """,
+        """
+        This Internet-Draft will expire on {expiration_date}.
         """,
     ]
