@@ -364,6 +364,8 @@ def main():
             if not filename:
                 filename = basename + '.prepped.xml'
                 options.output_filename = filename
+            v2v3 = xml2rfc.V2v3XmlWriter(xmlrfc, options=options, date=options.date)
+            xmlrfc.tree = v2v3.convert2to3()
             preptool = xml2rfc.PrepToolWriter(xmlrfc, options=options, date=options.date)
             preptool.write(filename)
             options.output_filename = None
