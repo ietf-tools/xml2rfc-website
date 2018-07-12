@@ -8,6 +8,7 @@ import inspect
 import os
 import re
 import sys
+import six
 import textwrap
 
 from codecs import open
@@ -208,12 +209,12 @@ class TextWriter:
             self.die(e, "Trying to render text in a too narrow column: width: %s, text: '%s'" % (width, text))
         kwargs['hang'] = j.hang
         etext = self.render(e, width, **kwargs)
-        if not isinstance(etext, basestring):
+        if not isinstance(etext, six.string_types):
             debug.show('e.tag')
             debug.show('etext')
-        if not isinstance(etext, basestring):
+        if not isinstance(etext, six.string_types):
             self.err(e, "Expected etext to be a string, found '%s': '%s'" % (type(etext), etext))
-            assert isinstance(etext, basestring)
+            assert isinstance(etext, six.string_types)
         itext = indent(etext, j.indent, j.hang)
         if text:
             if '\n' in j.join:
@@ -1981,13 +1982,15 @@ class TextWriter:
         return org
 
     def render_organization(self, e, width, **kwargs):
-        org = e.text or ''
-        org = org.strip()
-        if org:
-            ascii = e.get('ascii')
-            if ascii:
-                org += ' (%s)' % ascii.strip()
-        text = fill(org, width=width, **kwargs)
+        text = ''
+        if e != None:
+            org = e.text or ''
+            org = org.strip()
+            if org:
+                ascii = e.get('ascii')
+                if ascii:
+                    org += ' (%s)' % ascii.strip()
+            text = fill(org, width=width, **kwargs)
         return text
 
     # 2.36.  <phone>
@@ -2037,7 +2040,7 @@ class TextWriter:
     #       One or more <postalLine> elements (Section 2.38)
     def render_postal(self, e, width, **kwargs):
         kwargs['joiners'] = { None: joiner('', '\n', '', 0, 0), }
-        if e.find('./postalLine'):
+        if e.find('./postalLine') != None:
             text = ''
             for c in e.getchildren():
                 text = self.join(text, c, width, **kwargs)
@@ -2079,7 +2082,9 @@ class TextWriter:
     # 2.38.1.  "ascii" Attribute
     # 
     #    The ASCII equivalent of the text in the address line.
-
+    def render_postalline(self, e, width, **kwargs):
+        text = fill(self.inner_text_renderer(e), width=width, **kwargs)
+        return text
 
     # 2.39.  <refcontent>
     # 
