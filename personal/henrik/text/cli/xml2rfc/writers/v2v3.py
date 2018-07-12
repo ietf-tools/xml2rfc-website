@@ -576,18 +576,25 @@ class V2v3XmlWriter(object):
 #             "historic": "Historic",
 #             "info": "Informational",
 #         }
+        def equal(e1, e2):
+            return etree.tostring(e1) == etree.tostring(e2)
         front = e.find('./front')
         title = e.find('./front/title')
         i = front.index(title) + 1 if title!=None else 0
+        series = front.xpath('seriesInfo')
         if 'category' in e.attrib and 'seriesNo' in e.attrib:
             attr = {
                 'name': e.get('category'),
                 'value': e.get('seriesNo')
             }
-            front.insert(i, self.element('seriesInfo', **attr))
+            new = self.element('seriesInfo', **attr)
+            if not [ s for s in series if equal(s, new) ]:
+                front.insert(i, new)
             stripattr(e, ['seriesNo', ]) # keep 'category' for use in preptool
         if 'number' in e.attrib:
-            front.insert(i, self.element('seriesInfo', name="RFC", value=e.get('number')))
+            new = self.element('seriesInfo', name="RFC", value=e.get('number'))
+            if not [ s for s in series if equal(s, new) ]:
+                front.insert(i, new)
             if 'docName' in e.attrib:
                 e.insert(0, self.element('link', rel='convertedFrom', href="https://datatracker.ietf.org/doc/%s"%(e.get('docName'), )))
         elif 'docName' in e.attrib:
@@ -596,7 +603,9 @@ class V2v3XmlWriter(object):
                 log.warn("The 'docName' attribute of the <rfc/> element should not contain any filename extension: docName=\"draft-foo-bar-02\".")
             if not re.search('-\d\d$', value):
                 log.warn("The 'docName' attribute of the <rfc/> element should have a revision number as the last component when submitted: docName=\"draft-foo-bar-02\".")
-            front.insert(i, self.element('seriesInfo', name="Internet-Draft", value=value))
+            new = self.element('seriesInfo', name="Internet-Draft", value=value)
+            if not [ s for s in series if equal(s, new) ]:
+                front.insert(i, new)
 
         stripattr(e, ['xi', ])
 
