@@ -132,6 +132,11 @@ v3featuretest: cleantmp  env/bin/python install
 	@ xml2rfc --cache tests/cache --no-network --utf8 --base tmp/ --prep tests/input/draft-v3-features.xml
 	diff -I '$(datetime_regex)' -I '$(version_regex)' -I '$(date_regex)' tests/valid/draft-v3-features.prepped.xml tmp/draft-v3-features.prepped.xml || { echo "Diff failed for $$doc$$type output"; exit 1; } 
 
+elementstest: cleantmp  env/bin/python install
+	@ xml2rfc --cache tests/cache --no-network --utf8 --out tmp/elements.text --text --v3 tests/input/elements.xml
+	@ xml2rfc --cache tests/cache --no-network --utf8 --out tmp/elements.prepped.xml --prep tests/input/elements.xml
+	diff -I '$(datetime_regex)' -I '$(version_regex)' -I '$(date_regex)' tests/valid/elements.text tmp/elements.text || { echo "Diff failed for $$doc$$type output"; exit 1; } 
+	diff -I '$(datetime_regex)' -I '$(version_regex)' -I '$(date_regex)' tests/valid/elements.prepped.xml tmp/elements.prepped.xml || { echo "Diff failed for $$doc$$type output"; exit 1; } 
 
 cleantmp:
 	[ -d tmp ] || mkdir -p tmp
