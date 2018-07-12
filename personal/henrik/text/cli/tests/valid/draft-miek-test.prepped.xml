@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<rfc category="info" consensus="false" docName="draft-gieben-writing-rfcs-pandoc-02" indexInclude="true" ipr="trust200902" prepTime="2018-07-07" scripts="Common,Latin" sortRefs="true" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3" xml:lang="en">
+<rfc category="info" consensus="false" docName="draft-gieben-writing-rfcs-pandoc-02" indexInclude="true" ipr="trust200902" prepTime="2018-07-12" scripts="Common,Latin" sortRefs="true" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true" version="3" xml:lang="en">
   <!--generate a table of contents -->
   <!--use anchors instead of numbers for references -->
   <!--alphabetize the references -->
@@ -259,44 +259,44 @@
       <t pn="section-2-5">So using Pandoc for writing RFCs seems like a sane choice. As <tt>xml2rfc</tt> uses XML, the easiest way would be to create <tt>docbook</tt> XML and transform that using XSLT.  Pandoc2rfc does just that. The conversions are, in some way amusing, as we start off with (almost) plain text, use elaborate XML and end up with plain text again.  </t>
       <figure anchor="fig-attempt-to" align="left" suppress-title="false" pn="figure-1">
         <name slugifiedName="name-attempt-to-justify-pandoc2r">Attempt to justify Pandoc2rfc.</name>
-        <artwork name="" type="" align="left" alt="" pn="section-2-6">
+        <artwork name="" type="" align="left" alt="" pn="section-2-6"><![CDATA[
 +-------------------+   pandoc   +---------+  
-| ALMOST PLAIN TEXT |   ------&gt;  | DOCBOOK |  
+| ALMOST PLAIN TEXT |   ------>  | DOCBOOK |  
 +-------------------+            +---------+  
               |                       |
 non-existent  |                       | xsltproc
   faster way  |                       |
               v                       v
       +------------+    xml2rfc  +---------+ 
-      | PLAIN TEXT |  &lt;--------  | XML2RFC | 
+      | PLAIN TEXT |  <--------  | XML2RFC | 
       +------------+             +---------+ 
-</artwork>
+]]></artwork>
       </figure>
       <t pn="section-2-7">The XML generated (the output after the <tt>xsltproc</tt> step in <xref target="fig-attempt-to" format="default" derivedContent="Figure 1"/>) is suitable for inclusion in either the <tt>middle</tt> or <tt>back</tt> section of an RFC. The simplest way is to create a template XML file and include the appropriate XML: </t>
       <figure anchor="fig-a-minimal-" align="left" suppress-title="false" pn="figure-2">
         <name slugifiedName="name-a-minimal-templatexml">A minimal template.xml.</name>
-        <artwork name="" type="" align="left" alt="" pn="section-2-8">
-&lt;?xml version='1.0' ?&gt;
-&lt;!DOCTYPE rfc SYSTEM 'rfc2629.dtd' [
-&lt;!ENTITY pandocMiddle PUBLIC '' 'middle.xml'&gt;
-&lt;!ENTITY pandocBack   PUBLIC '' 'back.xml'&gt;
-]&gt;
+        <artwork name="" type="" align="left" alt="" pn="section-2-8"><![CDATA[
+<?xml version='1.0' ?>
+<!DOCTYPE rfc SYSTEM 'rfc2629.dtd' [
+<!ENTITY pandocMiddle PUBLIC '' 'middle.xml'>
+<!ENTITY pandocBack   PUBLIC '' 'back.xml'>
+]>
 
-&lt;rfc ipr='trust200902' docName='draft-gieben-pandoc-rfcs-02'&gt;
- &lt;front&gt;
-    &lt;title&gt;Writing I-Ds and RFCs using Pandoc v2&lt;/title&gt;
-&lt;/front&gt;
+<rfc ipr='trust200902' docName='draft-gieben-pandoc-rfcs-02'>
+ <front>
+    <title>Writing I-Ds and RFCs using Pandoc v2</title>
+</front>
 
-&lt;middle&gt;
-    &amp;pandocMiddle;
-&lt;/middle&gt;
+<middle>
+    &pandocMiddle;
+</middle>
 
-&lt;back&gt;
-    &amp;pandocBack;
-&lt;/back&gt;
+<back>
+    &pandocBack;
+</back>
 
-&lt;/rfc&gt;
-</artwork>
+</rfc>
+]]></artwork>
       </figure>
       <t pn="section-2-9">See the Makefile for an example of this. In this case you need to edit 3 documents: </t>
       <ol spacing="normal" type="1" start="1" pn="section-2-10">
@@ -309,9 +309,9 @@ non-existent  |                       | xsltproc
         <name slugifiedName="name-dependencies">Dependencies</name>
         <t pn="section-2.1-1">It needs <tt>xsltproc</tt> and <tt>pandoc</tt> to be installed. See the <eref target="http://johnmacfarlane.net/pandoc/README.html">Pandoc user manual for the details</eref> on how to type in Pandoc style. And of course <tt>xml2rfc</tt> version two.  </t>
         <t pn="section-2.1-2">When using Pandoc2rfc consider adding the following sentence to an Acknowledgements section: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-2.1-3">
+        <artwork name="" type="" align="left" alt="" pn="section-2.1-3"><![CDATA[
  This document was produced using the Pandoc2rfc tool.
-</artwork>
+]]></artwork>
       </section>
     </section>
     <section anchor="starting-a-new-project" toc="include" numbered="true" removeInRFC="false" pn="section-3">
@@ -403,10 +403,10 @@ non-existent  |                       | xsltproc
       <section anchor="section" toc="include" numbered="true" removeInRFC="false" pn="section-7.2">
         <name slugifiedName="name-section">Section</name>
         <t pn="section-7.2-1">Just use the normal sectioning commands available in Pandoc, for instance: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.2-2">
+        <artwork name="" type="" align="left" alt="" pn="section-7.2-2"><![CDATA[
 # Section1 One
 Bla
-</artwork>
+]]></artwork>
         <t pn="section-7.2-3">Converts to: <tt>&lt;section title="Section1 One" anchor="section1-one"&gt;</tt> If you have another section that is also named "Section1 One", that anchor will be called "section1-one-1", but <em>only</em> when the sections are in the <em>same</em> source file! </t>
         <t pn="section-7.2-4">Referencing the section is done with <tt>see [](#section1-one)</tt>, as in see <xref target="section" format="default" derivedContent="Section 7.2"/>.  </t>
       </section>
@@ -415,12 +415,12 @@ Bla
         <t pn="section-7.3-1">A good number of styles are supported.  </t>
         <section anchor="symbol" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.1">
           <name slugifiedName="name-symbol">Symbol</name>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.1-1">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.1-1"><![CDATA[
 A symbol list.
 
 * Item one;
 * Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.1-2">Converts to <tt>&lt;list style="symbol"&gt;</tt>: </t>
           <ul spacing="normal" bare="false" empty="false" pn="section-7.3.1-3">
             <li pn="section-7.3.1-4">Item one; </li>
@@ -429,12 +429,12 @@ A symbol list.
         </section>
         <section anchor="number" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.2">
           <name slugifiedName="name-number">Number</name>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.2-1">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.2-1"><![CDATA[
 A numbered list.
 
 1. Item one;
 1. Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.2-2">Converts to <tt>&lt;list style="numbers"&gt;</tt>: </t>
           <ol spacing="normal" type="1" start="1" pn="section-7.3.2-3">
             <li pn="section-7.3.2-4">Item one; </li>
@@ -444,12 +444,12 @@ A numbered list.
         <section anchor="empty" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.3">
           <name slugifiedName="name-empty">Empty</name>
           <t pn="section-7.3.3-1">Using the default list markers from Pandoc: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.3-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.3-2"><![CDATA[
 A list using the default list markers.
 
 #. Item one;
 #. Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.3-3">Converts to <tt>&lt;list style="empty"&gt;</tt>: </t>
           <ul empty="true" spacing="normal" bare="false" pn="section-7.3.3-4">
             <li pn="section-7.3.3-5">Item one; </li>
@@ -459,20 +459,20 @@ A list using the default list markers.
         <section anchor="roman" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.4">
           <name slugifiedName="name-roman">Roman</name>
           <t pn="section-7.3.4-1">Use the supported Pandoc syntax: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.4-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.4-2"><![CDATA[
 ii. Item one;
 ii. Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.4-3">Converts to <tt>&lt;list style="format %i."&gt;</tt>: </t>
           <ol spacing="normal" type="%i." start="1" pn="section-7.3.4-4">
             <li pn="section-7.3.4-5">Item one; </li>
             <li pn="section-7.3.4-6">Item two.  </li>
           </ol>
           <t pn="section-7.3.4-7">If you use uppercase Roman numerals, they convert to a different style: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.4-8">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.4-8"><![CDATA[
 II. Item one;
 II. Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.4-9">Yields <tt>&lt;list style="format (%d) "&gt;</tt>: </t>
           <ol spacing="normal" type="(%d)" start="1" pn="section-7.3.4-10">
             <li pn="section-7.3.4-11">Item one; </li>
@@ -482,20 +482,20 @@ II. Item two.
         <section anchor="letter" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.5">
           <name slugifiedName="name-letter">Letter</name>
           <t pn="section-7.3.5-1">A numbered list.  </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.5-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.5-2"><![CDATA[
 a.  Item one;
 b.  Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.5-3">Converts to <tt>&lt;list style="letters"&gt;</tt>: </t>
           <ol spacing="normal" type="a" start="1" pn="section-7.3.5-4">
             <li pn="section-7.3.5-5">Item one; </li>
             <li pn="section-7.3.5-6">Item two.  </li>
           </ol>
           <t pn="section-7.3.5-7">Uppercasing the letters works too (note two spaces after the letter.  </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.5-8">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.5-8"><![CDATA[
 A.  Item one;
 B.  Item two.
-</artwork>
+]]></artwork>
           <t pn="section-7.3.5-9">Becomes: </t>
           <ol spacing="normal" type="%C." start="1" pn="section-7.3.5-10">
             <li pn="section-7.3.5-11">Item one; </li>
@@ -505,7 +505,7 @@ B.  Item two.
         <section anchor="hanging" toc="include" numbered="true" removeInRFC="false" pn="section-7.3.6">
           <name slugifiedName="name-hanging">Hanging</name>
           <t pn="section-7.3.6-1">This is more like a description list, so we need to use: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.3.6-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.3.6-2"><![CDATA[
 First item that needs clarification:
 
 :   Explanation one
@@ -516,7 +516,7 @@ More stuff, because item is difficult to explain.
 Second item that needs clarification:
 
 :   Explanation two
-</artwork>
+]]></artwork>
           <t pn="section-7.3.6-3">Converts to: <tt>&lt;list style="hanging"&gt;</tt> and <tt>&lt;t hangText="First item that..."&gt;</tt></t>
           <t pn="section-7.3.6-4">If you want a newline after the hangTexts, search for the string <tt>OPTION</tt> in <tt>transform.xsl</tt> and uncomment it.  </t>
         </section>
@@ -524,9 +524,9 @@ Second item that needs clarification:
       <section anchor="figureartwork" toc="include" numbered="true" removeInRFC="false" pn="section-7.4">
         <name slugifiedName="name-figure-artwork">Figure/Artwork</name>
         <t pn="section-7.4-1">Indent the paragraph with 4 spaces.  </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.4-2">
+        <artwork name="" type="" align="left" alt="" pn="section-7.4-2"><![CDATA[
 Like this
-</artwork>
+]]></artwork>
         <t pn="section-7.4-3">Converts to: <tt>&lt;figure&gt;&lt;artwork&gt; ...</tt> Note that <tt>xml2rfc</tt> supports a caption with <tt>&lt;artwork&gt;</tt>. Pandoc does not support this, but Pandoc2rfc does. If you add a <tt>@Figure: some text</tt> as the last line, the artwork gets a <tt>title</tt> attribute with the text after <tt>@Figure:</tt>. It will also be possible to reference the artwork. If a caption is supplied the artwork will be centered. If a caption is needed but the figure should not be centered use <tt>@figure:\</tt>.  </t>
         <section anchor="references" toc="include" numbered="true" removeInRFC="false" pn="section-7.4.1">
           <name slugifiedName="name-references">References</name>
@@ -543,9 +543,9 @@ Like this
       <section anchor="block-quote" toc="include" numbered="true" removeInRFC="false" pn="section-7.5">
         <name slugifiedName="name-block-quote">Block Quote</name>
         <t pn="section-7.5-1">Any paragraph like: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.5-2">
-&gt; quoted text
-</artwork>
+        <artwork name="" type="" align="left" alt="" pn="section-7.5-2"><![CDATA[
+> quoted text
+]]></artwork>
         <t pn="section-7.5-3">Converts to: <tt>&lt;t&gt;&lt;list style="empty"&gt; ...</tt> paragraph, making it indented.  </t>
       </section>
       <section anchor="references-1" toc="include" numbered="true" removeInRFC="false" pn="section-7.6">
@@ -553,26 +553,26 @@ Like this
         <section anchor="external" toc="include" numbered="true" removeInRFC="false" pn="section-7.6.1">
           <name slugifiedName="name-external">External</name>
           <t pn="section-7.6.1-1">Any reference like: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.6.1-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.6.1-2"><![CDATA[
 [Click here](URI)
-</artwork>
+]]></artwork>
           <t pn="section-7.6.1-3">Converts to: <tt>&lt;ulink target="URI"&gt;Click here ...</tt></t>
         </section>
         <section anchor="internal" toc="include" numbered="true" removeInRFC="false" pn="section-7.6.2">
           <name slugifiedName="name-internal">Internal</name>
           <t pn="section-7.6.2-1">Any reference like: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-2"><![CDATA[
 [Click here](#localid)
-</artwork>
+]]></artwork>
           <t pn="section-7.6.2-3">Converts to: <tt>&lt;link target="localid"&gt;Click here ...</tt></t>
           <t pn="section-7.6.2-4">For referring to RFCs (for which you manually need add the reference source in the template, with an external XML entity), you can just use: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-5">
+          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-5"><![CDATA[
 [](#RFC2119)
-</artwork>
+]]></artwork>
           <t pn="section-7.6.2-6">And it does the right thing. Referencing sections is done with: </t>
-          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-7">
+          <artwork name="" type="" align="left" alt="" pn="section-7.6.2-7"><![CDATA[
 See [](#pandoc-constructs)
-</artwork>
+]]></artwork>
           <t pn="section-7.6.2-8">The word 'Section' is inserted automatically: ... see <xref target="pandoc-constructs" format="default" derivedContent="Section 7"/> ... For referencing figures/artworks see <xref target="figureartwork" format="default" derivedContent="Section 7.4"/>. For referencing tables see <xref target="tables" format="default" derivedContent="Section 7.8"/>.  </t>
         </section>
       </section>
@@ -587,7 +587,7 @@ See [](#pandoc-constructs)
         <t pn="section-7.8-1">A table can be entered as: </t>
         <figure anchor="fig-a-caption-" align="left" suppress-title="false" pn="figure-3">
           <name slugifiedName="name-a-caption-describing-the-fi">A caption describing the figure describing the table.</name>
-          <artwork name="" type="" align="left" alt="" pn="section-7.8-2">
+          <artwork name="" type="" align="left" alt="" pn="section-7.8-2"><![CDATA[
   Right     Left     Center     Default                                                                  
   -------   ------ ----------   -------                                                                  
        12     12        12        12                                                                   
@@ -595,7 +595,7 @@ See [](#pandoc-constructs)
         1     1         1         1       
 
   Table: A caption describing the table.
-  </artwork>
+  ]]></artwork>
         </figure>
         <t pn="section-7.8-3">Is translated to <tt>&lt;texttable&gt;</tt> element in <tt>xml2rfc</tt>. You can choose multiple styles as input, but they all are converted to the same style (plain <tt>&lt;texttable&gt;</tt>) table in <tt>xml2rfc</tt>. The column alignment is copied over to the generated XML.  </t>
         <section anchor="references-2" toc="include" numbered="true" removeInRFC="false" pn="section-7.8.1">
@@ -613,19 +613,19 @@ See [](#pandoc-constructs)
       <section anchor="indexes" toc="include" numbered="true" removeInRFC="false" pn="section-7.9">
         <name slugifiedName="name-indexes">Indexes</name>
         <t pn="section-7.9-1">The footnote syntax of Pandoc is slightly abused to support an index. Footnotes are entered in two steps, you have a marker in the text, and later you give actual footnote text. Like this: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.9-2">
+        <artwork name="" type="" align="left" alt="" pn="section-7.9-2"><![CDATA[
 [^1]
 
 [^1]: footnote text
-</artwork>
+]]></artwork>
         <t pn="section-7.9-3">We re-use this syntax for the <tt>&lt;iref&gt;</tt> tag.  The above text translates to: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.9-4">
-&lt;iref item="footnote text"/&gt;
-</artwork>
+        <artwork name="" type="" align="left" alt="" pn="section-7.9-4"><![CDATA[
+<iref item="footnote text"/>
+]]></artwork>
         <t pn="section-7.9-5">Sub items are also supported. Use an exclamation mark (<tt>!</tt>) to separate them: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-7.9-6">
+        <artwork name="" type="" align="left" alt="" pn="section-7.9-6"><![CDATA[
 [^1]: item!sub item
-</artwork>
+]]></artwork>
       </section>
     </section>
     <section anchor="usage-guidelines" toc="include" numbered="true" removeInRFC="false" pn="section-8">
@@ -633,22 +633,22 @@ See [](#pandoc-constructs)
       <section anchor="working-with-multiple-files" toc="include" numbered="true" removeInRFC="false" pn="section-8.1">
         <name slugifiedName="name-working-with-multiple-files">Working with multiple files</name>
         <t pn="section-8.1-1">As an author you will probably break up a draft in multiple files, each dealing with a subject or section. When doing so sections with the same title will clash with each other. Pandoc can deal with this situation, but only if the different sections are in the <em>same</em> file or processed in the same Pandoc run. Concatenating the different section files before processing them is a solution to this problem. You can, for instance, amend the <tt>Makefile</tt> and add something like this: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-8.1-2">
+        <artwork name="" type="" align="left" alt="" pn="section-8.1-2"><![CDATA[
 allsections.pdc: section.pdc.1 section.pdc.2 section.pdc.3
-        cat $@ &gt; allsections.pdc
-</artwork>
+        cat $@ > allsections.pdc
+]]></artwork>
         <t pn="section-8.1-3">And then process <tt>allsection.pdc</tt> in the normal way.  </t>
       </section>
       <section anchor="setting-the-title" toc="include" numbered="true" removeInRFC="false" pn="section-8.2">
         <name slugifiedName="name-setting-the-title">Setting the title</name>
         <t pn="section-8.2-1">If you use double quotes in the documents title in the <tt>docName</tt> attribute, like: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-8.2-2">
-&lt;rfc ipr="trust200902" docName="draft-gieben-writing-rfcs-pandoc-02"&gt;
-</artwork>
+        <artwork name="" type="" align="left" alt="" pn="section-8.2-2"><![CDATA[
+<rfc ipr="trust200902" docName="draft-gieben-writing-rfcs-pandoc-02">
+]]></artwork>
         <t pn="section-8.2-3">The Makefile will pick this up automatically and make a symbolic link: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-8.2-4">
-draft-gieben-writing-rfcs-pandoc-00.txt -&gt; draft.txt
-</artwork>
+        <artwork name="" type="" align="left" alt="" pn="section-8.2-4"><![CDATA[
+draft-gieben-writing-rfcs-pandoc-00.txt -> draft.txt
+]]></artwork>
         <t pn="section-8.2-5">This makes uploading the file to the i-d tracker a bit easier.  </t>
       </section>
       <section anchor="uploading-the-xmltxt" toc="include" numbered="true" removeInRFC="false" pn="section-8.3">
@@ -756,10 +756,10 @@ draft-gieben-writing-rfcs-pandoc-00.txt -&gt; draft.txt
       </section>
       <section anchor="verbatim-code-blocks" toc="include" numbered="true" removeInRFC="false" pn="section-a.4">
         <name slugifiedName="name-verbatim-code-blocks">Verbatim code blocks</name>
-        <artwork name="" type="" align="left" alt="" pn="section-a.4-1">
+        <artwork name="" type="" align="left" alt="" pn="section-a.4-1"><![CDATA[
 A verbatim code block
 jkasjksajassjasjsajsajkas
-</artwork>
+]]></artwork>
       </section>
       <section anchor="reference-tests" toc="include" numbered="true" removeInRFC="false" pn="section-a.5">
         <name slugifiedName="name-reference-tests">Reference Tests</name>
@@ -858,16 +858,16 @@ jkasjksajassjasjsajsajkas
           <li pn="section-a.7-61">This is the next bullet. New paragraphs should be indented with 4 four spaces.  </li>
           <li pn="section-a.7-62">
             <t pn="section-a.7-63">Another item with some artwork, indented by 8 spaces.  </t>
-            <artwork name="" type="" align="left" alt="" pn="section-a.7-64">
+            <artwork name="" type="" align="left" alt="" pn="section-a.7-64"><![CDATA[
 Artwork
-</artwork>
+]]></artwork>
           </li>
           <li pn="section-a.7-65">Final item.  </li>
         </ol>
         <t pn="section-a.7-66">xml2rfc does not allow this, so the second paragraph is faked with a </t>
-        <artwork name="" type="" align="left" alt="" pn="section-a.7-67">
-&lt;vspace blankLines='1'&gt;
-</artwork>
+        <artwork name="" type="" align="left" alt="" pn="section-a.7-67"><![CDATA[
+<vspace blankLines='1'>
+]]></artwork>
         <t pn="section-a.7-68">Ordered lists.  </t>
         <ol spacing="normal" type="1" start="1" pn="section-a.7-69">
           <li pn="section-a.7-70">First item </li>
@@ -910,10 +910,10 @@ Artwork
           <dt pn="section-a.7-99">Item1:</dt>
           <dd pn="section-a.7-100">
             <t pn="section-a.7-101">Tell something about it. Tell something about it. Tell something about it. Tell something about it. Tell something about it. Tell something about it.  </t>
-            <artwork name="" type="" align="left" alt="" pn="section-a.7-102">
+            <artwork name="" type="" align="left" alt="" pn="section-a.7-102"><![CDATA[
 miek.nl.    IN  NS  a.miek.nl.                             
-a.miek.nl.  IN  A   192.0.2.1    ; &lt;- this is glue            
-</artwork>
+a.miek.nl.  IN  A   192.0.2.1    ; <- this is glue            
+]]></artwork>
             <t pn="section-a.7-103"> Tell some more about it. Tell some more about it. Tell some more about it.  </t>
           </dd>
           <dt pn="section-a.7-104">Item2:</dt>
@@ -1041,9 +1041,9 @@ a.miek.nl.  IN  A   192.0.2.1    ; &lt;- this is glue
           </tbody>
         </table>
         <t pn="section-a.8-3">This table has no caption, and therefor no reference. But you can refer to some of the other tables, with for instance: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-a.8-4">
+        <artwork name="" type="" align="left" alt="" pn="section-a.8-4"><![CDATA[
 See [](#tab-here-s-the)
-</artwork>
+]]></artwork>
         <t pn="section-a.8-5">Which will become "See <xref target="tab-here-s-the" format="default" derivedContent="Table 2"/>".  </t>
         <t pn="section-a.8-6" anchor="section-a.8-6">
           <iref item="table" subitem="grid" primary="false" pn="iref-table-grid-4"/>
@@ -1062,27 +1062,27 @@ See [](#tab-here-s-the)
         <name slugifiedName="name-figure-tests">Figure tests</name>
         <figure anchor="fig-this-is-th" align="left" suppress-title="false" pn="figure-4">
           <name slugifiedName="name-this-is-the-caption-with-te">This is the caption, with text in `typewriter`. Which isnt converted to a &lt;spanx&gt; style, because this is copied as-is.</name>
-          <artwork name="" type="" align="left" alt="" pn="section-a.10-1">
+          <artwork name="" type="" align="left" alt="" pn="section-a.10-1"><![CDATA[
 This is a figure
 This is a figure
 This is a figure
 This is a figure
-</artwork>
+]]></artwork>
         </figure>
         <t pn="section-a.10-2">And how a figure that is not centered, do to using <tt>figure</tt> and not <tt>Figure</tt>.  </t>
         <figure anchor="fig-a-non-cent" align="left" suppress-title="false" pn="figure-5">
           <name slugifiedName="name-a-non-centered-figure">A non centered figure.</name>
-          <artwork name="" type="" align="left" alt="" pn="section-a.10-3">
+          <artwork name="" type="" align="left" alt="" pn="section-a.10-3"><![CDATA[
 This is a figure
 This is a figure
-</artwork>
+]]></artwork>
         </figure>
         <t pn="section-a.10-4">Test the use of <tt>@title</tt>: </t>
-        <artwork name="" type="" align="left" alt="" pn="section-a.10-5">
+        <artwork name="" type="" align="left" alt="" pn="section-a.10-5"><![CDATA[
 This is a figure with a title
 This is a figure with a title
 @title: and here it is: a title, don't mess it up *
-</artwork>
+]]></artwork>
       </section>
       <section anchor="verse-tests" toc="include" numbered="true" removeInRFC="false" pn="section-a.11">
         <name slugifiedName="name-verse-tests">Verse tests</name>
