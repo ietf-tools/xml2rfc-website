@@ -1,0 +1,31 @@
+Introduction
+============
+
+The IETF_ uses a specific format for the standards and other documents it
+publishes as RFCs_, and for the draft documents which are produced when
+developing documents for publications.  There exists a number of different
+tools to facilitate the formatting of drafts and RFCs according to the
+existing rules, and this tool, **xml2rfc**, is one of them.  It takes as input
+an xml file which contains the text and meta-information about author names
+etc., and transforms it into suitably formatted output.  The input xml file
+should follow the DTD given in RFC2629_ (or it's `inofficial successor`_).
+
+The current incarnation of **xml2rfc** provides output in the following
+formats: Paginated and unpaginated ascii text, html, nroff, and expanded xml.
+Only the paginated text format is currently (January 2013) accepable as draft
+submissions to the IETF.
+
+.. _IETF: https://www.ietf.org/
+.. _RFCs: https://www.rfc-editor.org/
+.. _RFC2629: https://tools.ietf.org/html/rfc2629
+.. _inofficial successor: https://tools.ietf.org/html/draft-mrose-writing-rfcs
+
+Usage
+=====
+
+xml2rfc accepts a single XML document as input and outputs to one or more conversion formats.
+
+**Basic Usage**: ``xml2rfc SOURCE [options] FORMATS...``
+
+Run ``xml2rfc --help`` for a full listing of command-line options.
+
