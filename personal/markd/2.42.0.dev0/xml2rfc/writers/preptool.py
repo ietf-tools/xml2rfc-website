@@ -222,6 +222,7 @@ class PrepToolWriter(BaseV3Writer):
             '.;normalize_text_items()',
             './/bcp14;check_key_words()',
             './/*[@anchor]',                    # 5.1.5.  Check "anchor"
+            '.;ensure_back()',                  #         Ensure the existence of the "<back/>" section
             '.;insert_version()',               # 5.2.1.  "version" Insertion
             './front;insert_series_info()',     # 5.2.2.  "seriesInfo" Insertion
             './front;insert_date())',           # 5.2.3.  <date> Insertion
@@ -2168,6 +2169,20 @@ class PrepToolWriter(BaseV3Writer):
             self.back_section_add_number(index, e)
             self.paragraph_add_numbers(index, e)
 
+    # ensure_back()
+    #
+    # If the XML source omits a <back/> section, then the resultant
+    # RFC/draft omits the Author's Address section (and possibly others,
+    # too) because the XPath pattern that triggers the copying of the
+    # data from the <front/> section to the <back/> section is not
+    # satisfied.  This will ensure that a <back/> section exists in the
+    # DOM, so that the regular expression is satisfied and therefore
+    # the back_insert_author_address() function below is called.
+    def ensure_back(self, e, p):
+        back = self.root.find('./back')
+        if back is None:
+            back = self.element('back', line=self.root[-1].sourceline)
+            e.append(back)
 
     def back_insert_author_address(self, e, p):
         if self.prepped:
