@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<rfc xmlns:xi="http://www.w3.org/2001/XInclude" version="3" category="info" consensus="false" docName="draft-sample-input-00" indexInclude="true" ipr="trust200902" prepTime="2020-03-25T08:48:56" scripts="Common,Latin" sortRefs="false" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true">
-  <!-- xml2rfc v2v3 conversion 2.40.1 -->
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude" version="3" category="info" consensus="false" docName="draft-sample-input-00" indexInclude="true" ipr="trust200902" prepTime="2020-04-15T16:06:40" scripts="Common,Latin" sortRefs="false" submissionType="IETF" symRefs="true" tocDepth="3" tocInclude="true">
+  <!-- xml2rfc v2v3 conversion 2.42.0 -->
   
   <front>
     <title abbrev="Abbreviated Title">Put Your Internet Draft Title</title>
@@ -73,6 +73,9 @@
           <li pn="section-toc.1-1.1">
             <t keepWithNext="true" pn="section-toc.1-1.1.1"><xref derivedContent="1" format="counter" sectionFormat="of" target="section-1"/>.  <xref derivedContent="" format="title" sectionFormat="of" target="name-some-unicode-strings">Some unicode strings</xref></t>
           </li>
+          <li pn="section-toc.1-1.2">
+            <t keepWithNext="true" pn="section-toc.1-1.2.1"><xref derivedContent="" format="none" sectionFormat="of" target="section-appendix.a"/><xref derivedContent="" format="title" sectionFormat="of" target="name-authors-address">Author's Address</xref></t>
+          </li>
         </ul>
       </section>
     </toc>
@@ -94,4 +97,21 @@
       </t>
     </section>
   </middle>
+  <back>
+    <section anchor="authors-addresses" numbered="false" removeInRFC="false" toc="include" pn="section-appendix.a">
+      <name slugifiedName="name-authors-address">Author's Address</name>
+      <author fullname="John Doe" initials="J." role="editor" surname="Doe">
+        <organization abbrev="Company" showOnFrontPage="true">Company</organization>
+        <address>
+          <postal>
+            <street/>
+            <city>Springfield</city>
+            <region>IL</region>
+            <country>US</country>
+          </postal>
+          <email>jdoe@example.com</email>
+        </address>
+      </author>
+    </section>
+  </back>
 </rfc>
