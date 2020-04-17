@@ -1054,3 +1054,15 @@ dl > dt {
 dl > dd {
   page-break-before: avoid;
 }
+
+/* Adapt to only one h1 element */
+h1 {
+  clear: both;
+  border-bottom: 1px solid #ddd;
+  margin: 0 0 0.5em 0;
+  padding: 1em 0 0.5em;
+}
+#title {
+  clear: none;
+  border-bottom: 0 none #fff;
+}
