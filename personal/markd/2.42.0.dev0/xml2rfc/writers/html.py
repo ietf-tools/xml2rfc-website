@@ -2488,11 +2488,14 @@ class HtmlWriter(BaseV3Writer):
                 return span
         else:
             h1 = build.h1()
+            h1.text = "\n  "
             if self.options.rfc:
                 rfc_number = self.root.get('number')
                 num_span = build.span("RFC %s" % rfc_number, id='rfcnum')
-                h1.append(num_span)
+                num_span.tail = "\n  "
+                h1.append( num_span )
             title_span = build.span(title, id='title')
+            title_span.tail = "\n"
             h1.append(title_span)
             h.append(h1)
             return h1
