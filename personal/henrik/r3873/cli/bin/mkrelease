@@ -75,15 +75,13 @@ trap 'echo "$program($LINENO): Command failed with error code $? ([$$] $0 $*)"; 
 
 # Options
 shortopts=hnvV
-longopts=help,dry-run,no-mail,only-mail,verbose,version
+longopts=help,dry-run,verbose,version
 
 # Default values
 MSG=""
 PROJ=xml2rfc
 VERFILE=$PROJ/__init__.py
 SETUP=setup.py
-REL=1
-MAIL=1
 do=""
 
 if   [ "$(uname)" = "Linux" ]; then
@@ -106,8 +104,6 @@ while true ; do
 	-n| --dry-run)		do="echo ==> ";;	#	 Show what would be done	
 	-v| --verbose)		VERBOSE=1;;	#	 Be more talkative
 	-V| --version)		version; exit;;	#	 Show program version, then exit
-        --no-mail)              MAIL=0; REL=1;; #        Do release, but don't send mail
-        --only-mail)            REL=0; MAIL=1;; #        Send release mail (assumes release done)
 	--)			shift; break;;
 	*) die "Internal error, inconsistent option specification: '$1'";;
     esac
@@ -170,116 +166,108 @@ VER="$(printf %d.%d.%d $MAJOR $MINOR $MAINT)"
 NEXT=$(( $MAINT + 1 ))
 DEV="$(printf %d.%d.%ddev1 $MAJOR $MINOR $NEXT)"
 
-if [ "$REL" ]; then
-    note "Checking that changelog information is available"
-    changes=$( sed -n "/^$PROJ ($VER.*)/,/^ -- /p" changelog )
-    [ "$changes" ] || die "No changelog information for $VER found"
+note "Checking that changelog information is available"
+changes=$( sed -n "/^$PROJ ($VER.*)/,/^ -- /p" changelog )
+[ "$changes" ] || die "No changelog information for $VER found"
 
-    contributors=$(echo "$changes" | sed 's/\.[ \t\n]/ /'| tr -c "a-z0-9.@-" "\n" | sort | uniq | grep '@' | sed -r -e 's/^\.+//' -e 's/\.+$//' -e 's/^/-c /' || true)
+contributors=$(echo "$changes" | sed 's/\.[ \t\n]/ /'| tr -c "a-z0-9.@-" "\n" | sort | uniq | grep '@' | sed -r -e 's/^\.+//' -e 's/\.+$//' -e 's/^/-c /' || true)
 
-    note "Checking that we don't have temporary editor files"
-    find $SRC/$PROJ -name '?*~' -print0 | grep -z . && die "Found temporary editor files, see above."
+note "Checking that we don't have temporary editor files"
+find $SRC/$PROJ -name '?*~' -print0 | grep -z . && die "Found temporary editor files, see above."
 
-    note "Set the current time on the release notes in the changelog file"
-    $do sed -r -i -e "1,/^ -- /s/([A-Za-z-]+ <[a-z0-9.-]+@[a-z0-9.-]+>  ).*$/\1$(date +'%d %b %Y %H:%M:%S %z')/" changelog
-    note " $(grep -m1 "^ -- " changelog)"
+note "Set the current time on the release notes in the changelog file"
+$do sed -r -i -e "1,/^ -- /s/([A-Za-z-]+ <[a-z0-9.-]+@[a-z0-9.-]+>  ).*$/\1$(date +'%d %b %Y %H:%M:%S %z')/" changelog
+note " $(grep -m1 "^ -- " changelog)"
 
-    note "Verifying that version $VER doesn't already exist..."
-    $do svn info $REPO/tags/${WORK:+$WORK/}$VER 2>&1 | $do egrep -q "(Not a valid URL|URL .* non-existent)" || die "The tag '$VER' already exists (or there was an error testing for it)."
-    note "  Ok"
+note "Verifying that version $VER doesn't already exist..."
+$do svn info $REPO/tags/${WORK:+$WORK/}$VER 2>&1 | $do egrep -q "(Not a valid URL|URL .* non-existent)" || die "The tag '$VER' already exists (or there was an error testing for it)."
+note "  Ok"
 
-    note "\nUpdating the version info in $VERFILE and settings.py"
-    $do sed -i -r -e "/^__version__/s/'[\.0-9]+(dev[0-9]+)?'/'$VER'/" $VERFILE
-    $do sed -i -r -e "/version=/s/'[\.0-9]+(dev[0-9]?)?'/'$VER'/" setup.py
+note "\nUpdating the version info in $VERFILE and settings.py"
+$do sed -i -r -e "/^__version__/s/'[\.0-9]+(dev[0-9]+)?'/'$VER'/" $VERFILE
+$do sed -i -r -e "/version=/s/'[\.0-9]+(dev[0-9]?)?'/'$VER'/" setup.py
 
-    note "\nVerifying that we're now reporting the correct version"
-    $do python setup.py -q install
-    $do [ $(xml2rfc --version | awk '{print $2}') = $VER ] || die "Xml2rfc reported the wrong version number"
+note "\nVerifying that we're now reporting the correct version"
+$do python setup.py -q install
+$do [ $(xml2rfc --version | awk '{print $2}') = $VER ] || die "Xml2rfc reported the wrong version number"
 
-    note "\nCommitting version information for version $VER: $MSG"
-    $do svn update
-    $do svn commit $VERFILE setup.py -m "Set version info to release version $VER before tagging."
+note "\nCommitting version information for version $VER: $MSG"
+$do svn update
+$do svn commit $VERFILE setup.py -m "Set version info to release version $VER before tagging."
 
-    note "\nCommitting the changelog..."
-    $do svn commit changelog -m "Changelog entry for $VER"
+note "\nCommitting the changelog..."
+$do svn commit changelog -m "Changelog entry for $VER"
 
-    note "\nUpdating manpage and docfiles with the new versions"
-    $do tox -- manupdate
-    $do svn commit -m "Updated manpage.txt and docfiles"
+note "\nUpdating manpage and docfiles with the new versions"
+$do tox -- manupdate
+$do svn commit -m "Updated manpage.txt and docfiles"
 
-    note "\nVerifying there's no uncommitted changes..."
-    $do svn st | grep "^[AMGRD] " && die "There seems to be uncommitted changes in this working copy"
+note "\nVerifying there's no uncommitted changes..."
+$do svn st | grep "^[AMGRD] " && die "There seems to be uncommitted changes in this working copy"
 
-    note "\nChecking that the changelog is valid rst ..."
-    $do rst2html changelog > /dev/null	# verify that the changelog is valid rst
+note "\nChecking that the changelog is valid rst ..."
+$do rst2html changelog > /dev/null	# verify that the changelog is valid rst
 
-    note "\nDoing the upload..."
-    $do python setup.py sdist upload --sign
+note "\nDoing the upload..."
+$do python setup.py sdist upload --sign
 
-    note "\nCopying the tarfile to the web directory for xml2rfc"
-    $do rsync dist/xml2rfc-$(xml2rfc --version | awk '{print $2}').tar.gz /www/tools.ietf.org/tools/xml2rfc2/cli/ || true
+note "\nCopying the tarfile to the web directory for xml2rfc"
+$do rsync dist/xml2rfc-$(xml2rfc --version | awk '{print $2}').tar.gz /www/tools.ietf.org/tools/xml2rfc2/cli/ || true
 
-    note "\nPushing the tarfile to other tools servers"
-    $do toolpush /www/tools.ietf.org/tools/xml2rfc2/cli/
+note "\nPushing the tarfile to other tools servers"
+$do toolpush /www/tools.ietf.org/tools/xml2rfc2/cli/
 
-    note "\nCreating new tag 'tags/${WORK:+$WORK/}$VER' from $SRC"
-    $do svn cp $REPO/$SRC $REPO/tags/${WORK:+$WORK/}$VER -m "Creating new tag 'tags/${WORK:+$WORK/}$VER' from $SRC"
+note "\nCreating new tag 'tags/${WORK:+$WORK/}$VER' from $SRC"
+$do svn cp $REPO/$SRC $REPO/tags/${WORK:+$WORK/}$VER -m "Creating new tag 'tags/${WORK:+$WORK/}$VER' from $SRC"
 
-    note "\nUpdating version info to indicate development mode"
-    $do sed -i -r -e "/^__version__/s/'[\.0-9]+(dev[0-9]?)?\"/'$NEXT'/" $VERFILE
-    $do sed -i -r -e "/version=/s/'[\.0-9]+(dev[0-9]?)?\"/'$NEXT'/" setup.py
+note "\nUpdating version info to indicate development mode"
+$do sed -i -r -e "/^__version__/s/'[\.0-9]+(dev[0-9]?)?\"/'$NEXT'/" $VERFILE
+$do sed -i -r -e "/version=/s/'[\.0-9]+(dev[0-9]?)?\"/'$NEXT'/" setup.py
 
-    note "\nCommitting the updated version"
-    $do svn commit $VERFILE setup.py -m "Set version info back to development mode"
+note "\nCommitting the updated version"
+$do svn commit $VERFILE setup.py -m "Set version info back to development mode"
 
-    $do svn update
+$do svn update
 
-    echo "
-    Hi,
+echo "
+Hi,
 
-    This is an automatic notification about a new xml2rfc release, 
-    v$VER, generated when running the mkrelease script.
+This is an automatic notification about a new xml2rfc release, 
+v$VER, generated when running the mkrelease script.
 
-    Release notes:
+Release notes:
 
-    $changes
+$changes
 
-    The preferred way to install xml2rfc is by doing 'pip install xml2rfc',
-    and 'pip install --upgrade xml2rfc' to upgrade.  If there are system-
-    installed python modules which pip will not upgrade, you may have to
-    use 'pip install --upgrade --no-deps xml2rfc' and install dependencies
-    manually.
+The preferred way to install xml2rfc is by doing 'pip install xml2rfc',
+and 'pip install --upgrade xml2rfc' to upgrade.  If there are system-
+installed python modules which pip will not upgrade, you may have to
+use 'pip install --upgrade --no-deps xml2rfc' and install dependencies
+manually.
 
-    The new version is also available through SVN checkout, with
-      'svn checkout $REPO/tags/${WORK:+$WORK/}$VER'
+The new version is also available through SVN checkout, with
+  'svn checkout $REPO/tags/${WORK:+$WORK/}$VER'
 
-    Documentation for this release is built-in, and also available at:
-      https://xml2rfc.tools.ietf.org/xml2rfc-doc-$VER.html
+Documentation for this release is built-in, and also available at:
+  https://xml2rfc.tools.ietf.org/xml2rfc-doc-$VER.html
 
-    Regards,
+Regards,
 
-            Henrik
-            (via the mkrelease script)
-    " > ./mail/release-mail-v$VER.txt
-fi
+	Henrik
+	(via the mkrelease script)
+" > ./mail/release-mail-v$VER.txt
 
-$do echo "MAIL: $MAIL"
+note "\nSend mail to interested parties"
+cat ./mail/release-mail-v$VER.txt | $do mail -s "New xml2rfc release: v$VER" \
+        -c henrik@levkowetz.com -c glen@amsl.com -c rjs@nostrum.com -c jay@ietf.org \
+        -c housley@vigilsec.com -c arusso@amsl.com -c priyanka@amsl.com -c johnl@taugh.com \
+        -c sginoza@amsl.com -c mferguson@amsl.com -c kmoreland@amsl.com -c maddy@amsl.com \
+        $contributors rse@rfc-editor.org
+note "\nSend mail to mailing lists (avoiding too many addressees)"
+cat ./mail/release-mail-v$VER.txt | $do mail -s "New xml2rfc release: v$VER" \
+        xml2rfc@ietf.org xml2rfc-dev@ietf.org -c rfc-markdown@ietf.org
 
-if [ "$MAIL" ]; then
-    note "\nSend mail to interested parties"
-
-    [ -f ./mail/release-mail-v$VER.txt ] || die "Missing mail file: ./mail/release-mail-v$VER.txt"
-    cat ./mail/release-mail-v$VER.txt | $do mail -s "New xml2rfc release: v$VER" \
-            -c henrik@levkowetz.com -c glen@amsl.com -c rjs@nostrum.com -c jay@ietf.org \
-            -c housley@vigilsec.com -c arusso@amsl.com -c priyanka@amsl.com -c johnl@taugh.com \
-            -c sginoza@amsl.com -c mferguson@amsl.com -c kmoreland@amsl.com -c maddy@amsl.com \
-            $contributors rse@rfc-editor.org
-    note "\nSend mail to mailing lists (avoiding too many addressees)"
-    cat ./mail/release-mail-v$VER.txt | $do mail -s "New xml2rfc release: v$VER" \
-            xml2rfc@ietf.org xml2rfc-dev@ietf.org -c rfc-markdown@ietf.org
-
-    #$do toolsfeed control changelog /www/tools.ietf.org/tools/atomfeed.xml
-    $do toolpush /www/tools.ietf.org/tools/atomfeed.xml
-    $do toolcmd sudo pip3.6 install --upgrade xml2rfc
-    $do toolcmd "xml2rfc --doc --out /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc-$VER.xml; xml2rfc --text --html /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc-$VER.xml; ln -sf xml2rfc-doc-$VER.html /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc.html"
-fi
+#$do toolsfeed control changelog /www/tools.ietf.org/tools/atomfeed.xml
+$do toolpush /www/tools.ietf.org/tools/atomfeed.xml
+$do toolcmd sudo pip3.6 install --upgrade xml2rfc
+$do toolcmd "xml2rfc --doc --out /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc-$VER.xml; xml2rfc --text --html /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc-$VER.xml; ln -sf xml2rfc-doc-$VER.html /www/tools.ietf.org/tools/xml2rfc/htdocs/xml2rfc-doc.html"
