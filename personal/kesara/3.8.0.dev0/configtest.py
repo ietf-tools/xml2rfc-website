@@ -45,7 +45,7 @@ for (fname, fcount) in [
         # try external program
 
         import subprocess
-        done = subprocess.run(["fc-list", fname], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done = subprocess.run(["fc-list", fname], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if done.returncode == 0:
             available = done.stdout.decode().splitlines()
             acount = len(available)
