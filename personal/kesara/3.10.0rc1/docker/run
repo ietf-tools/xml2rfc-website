@@ -120,7 +120,7 @@ done
 
 if   [ "$(uname)" = "Darwin" ]; then
     if [ "$(uname -m)" == "arm64" ]; then
-        echo "Running on Apple M1"
+        echo "Running on Darwin arm64"
     else
         APP="/Applications/Docker.app"
         CMD="open -a"
@@ -134,7 +134,7 @@ fi
 if   [ "$(uname)" = "Linux" ]; then
     echo "Not trying to start a virtual docker machine on Linux"
 elif [ "$(uname -sm)" == "Darwin arm64" ]; then
-    echo "Not trying to start a virtual docker machine on Apple M1"
+    echo "Not trying to start a virtual docker machine on Darwin arm64"
 elif [ -e "$APP" ]; then
     info=$(docker info 2>&1 || true)
     if ! docker info 1> /dev/null 2>&1; then
