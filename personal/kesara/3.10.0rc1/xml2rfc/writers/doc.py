@@ -121,7 +121,7 @@ class DocWriter(base.BaseV3Writer):
         for tdir in self.template_dirs:
             fn = os.path.join(tdir, 'doc.yaml')
             if os.path.exists(fn):
-                with io.open(fn) as file:
+                with io.open(fn, encoding="utf-8") as file:
                     text = file.read()
                     text = text.replace(r'\<', r'&lt;').replace(r'\>', r'&gt;').replace(r'\&', r'&amp;')
                     descriptions = yaml.load(text, Loader=yaml.FullLoader)
@@ -224,7 +224,7 @@ class DocWriter(base.BaseV3Writer):
     def write(self, filename):
         self.process()
 
-        with io.open(filename, "w") as file:
+        with io.open(filename, "w", encoding="utf-8") as file:
             file.write(self.rendered)
 
         if not self.options.quiet:
