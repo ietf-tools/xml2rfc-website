@@ -1,5 +1,5 @@
 xml2rfc(1)                                                    xml2rfc(1)
-                                                        22 November 2021
+                                                        29 November 2021
 
 
                   Xml2rfc Vocabulary Version 3 Schema
@@ -898,7 +898,7 @@ Table of Contents
    this type might be displayed as ranges.
 
    When the prep tool is creating index content, it collects the items
-   in a case-sensitive fashion for both the item and subitem level.
+   in a case-insensitive fashion for both the item and subitem level.
 
    This element can be a child element of <annotation>, <aside>,
    <blockquote>, <dd>, <dt>, <em>, <figure>, <li>, <name>, <section>,

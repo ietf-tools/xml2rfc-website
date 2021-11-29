@@ -613,7 +613,7 @@ iref:
        this type might be displayed as ranges.
 
     -  When the prep tool is creating index content, it collects the items
-       in a case-sensitive fashion for both the item and subitem level.
+       in a case-insensitive fashion for both the item and subitem level.
 
 iref[item]:
 
@@ -2133,6 +2133,3 @@ Configuration:
     - The complete long option names must be used in configuration files; 
       abbreviations will not be recognised (in contrast with how abbreviations
       are handled during command-line option processing).
-
-      
-     
