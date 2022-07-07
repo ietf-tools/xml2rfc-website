@@ -1,1 +1,0 @@
-../web/xml2rfc-wizard/echoXml.cgi
